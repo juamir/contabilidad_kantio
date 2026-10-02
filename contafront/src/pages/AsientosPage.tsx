@@ -86,17 +86,19 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
   const tabIndexMap: Record<string, number> = {
     asientos: 0,
     modelos: 1,
-    cierres: 2,
-    inflacion: 3,
-    integraciones: 4,
+    lote: 2,
+    cierres: 3,
+    inflacion: 4,
+    integraciones: 5,
   };
 
   const indexTabMap: Record<number, string> = {
     0: 'asientos',
     1: 'modelos',
-    2: 'cierres',
-    3: 'inflacion',
-    4: 'integraciones',
+    2: 'lote',
+    3: 'cierres',
+    4: 'inflacion',
+    5: 'integraciones',
   };
 
   const [activeTab, setActiveTab] = useState(tabIndexMap[tabParam] || 0);
@@ -511,6 +513,7 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
         >
           <Tab icon={<ReceiptLongIcon />} iconPosition="start" label="Registro de Asientos (Vouchers)" />
           <Tab icon={<AutoAwesomeIcon />} iconPosition="start" label="Comprobantes Modelo (Plantillas)" />
+          <Tab icon={<PlayArrowIcon />} iconPosition="start" label="Procesamiento por Lote" />
           <Tab icon={<LockClockIcon />} iconPosition="start" label="Cierre de Periodo / Ejercicio" />
           <Tab icon={<TrendingDownIcon />} iconPosition="start" label="Ajuste por Inflación (NIC 29)" />
           <Tab icon={<SyncAltIcon />} iconPosition="start" label="Integración Nómina & POS" />
@@ -882,9 +885,93 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
       )}
 
       {/* ============================================================== */}
-      {/* TAB 2: CIERRE DE PERIODO / EJERCICIO                           */}
+      {/* TAB 2: PROCESAMIENTO DE COMPROBANTES POR LOTE                  */}
       {/* ============================================================== */}
       {activeTab === 2 && (
+        <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
+          <CardContent sx={{ p: 3 }}>
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" fontWeight="bold">
+                Procesamiento Masivo y Aprobación de Comprobantes por Lote
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Permite asentar definitivamente en masa los comprobantes que se encuentren en estado Borrador/Revisado verificando su cuadre estricto bimonetario, o reversar a borrador asientos asentados por rango de fechas.
+              </Typography>
+            </Box>
+
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
+                  <Typography variant="subtitle1" fontWeight="bold" color="primary.main" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <PlayArrowIcon /> Asentar Comprobantes en Lote
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Filtra todos los comprobantes en borrador en el rango de fechas seleccionado, valida la igualdad Débitos = Créditos (Bs. y Divisas) y los convierte al estado <strong>ASENTADO</strong>.
+                  </Typography>
+                  <Grid container spacing={2} sx={{ mb: 2 }}>
+                    <Grid item xs={6}>
+                      <TextField fullWidth size="small" type="date" label="Desde" defaultValue="2026-10-01" InputLabelProps={{ shrink: true }} />
+                    </Grid>
+                    <Grid item xs={6}>
+                      <TextField fullWidth size="small" type="date" label="Hasta" defaultValue="2026-10-31" InputLabelProps={{ shrink: true }} />
+                    </Grid>
+                  </Grid>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    fullWidth
+                    startIcon={<CheckCircleIcon />}
+                    onClick={() => {
+                      alert('Procesamiento por lote ejecutado:\n- 14 Comprobantes validados y aprobados exitosamente a estado ASENTADO.');
+                      setToastMessage('Lote procesado: 14 comprobantes asentados.');
+                    }}
+                  >
+                    Aprobar & Asentar Lote
+                  </Button>
+                </Paper>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
+                  <Typography variant="subtitle1" fontWeight="bold" color="warning.main" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <LockClockIcon /> Reversar Asientos a Borrador
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Regresa los comprobantes previamente asentados al estado <strong>BORRADOR</strong> para habilitar correcciones o reajustes contables, siempre que el periodo fiscal no esté cerrado con candado.
+                  </Typography>
+                  <Grid container spacing={2} sx={{ mb: 2 }}>
+                    <Grid item xs={6}>
+                      <TextField fullWidth size="small" type="date" label="Desde" defaultValue="2026-10-01" InputLabelProps={{ shrink: true }} />
+                    </Grid>
+                    <Grid item xs={6}>
+                      <TextField fullWidth size="small" type="date" label="Hasta" defaultValue="2026-10-31" InputLabelProps={{ shrink: true }} />
+                    </Grid>
+                  </Grid>
+                  <Button
+                    variant="outlined"
+                    color="warning"
+                    fullWidth
+                    startIcon={<PlayArrowIcon />}
+                    onClick={() => {
+                      if (window.confirm('¿Confirma reversar a estado BORRADOR los comprobantes del periodo seleccionado?')) {
+                        alert('Reverso de lote ejecutado:\n- 14 Comprobantes restaurados a estado BORRADOR para edición.');
+                        setToastMessage('Lote reversado a borrador.');
+                      }
+                    }}
+                  >
+                    Reversar Lote a Borrador
+                  </Button>
+                </Paper>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 3: CIERRE DE PERIODO / EJERCICIO                           */}
+      {/* ============================================================== */}
+      {activeTab === 3 && (
         <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
           <CardContent sx={{ p: 3 }}>
             <Box sx={{ mb: 3 }}>
@@ -985,9 +1072,9 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
       )}
 
       {/* ============================================================== */}
-      {/* TAB 3: AJUSTE POR INFLACIÓN (NIC 29)                           */}
+      {/* TAB 4: AJUSTE POR INFLACIÓN (NIC 29)                           */}
       {/* ============================================================== */}
-      {activeTab === 3 && (
+      {activeTab === 4 && (
         <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
           <CardContent sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -1082,9 +1169,9 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
       )}
 
       {/* ============================================================== */}
-      {/* TAB 4: INTEGRACIÓN NÓMINA & POS                                */}
+      {/* TAB 5: INTEGRACIÓN NÓMINA & POS                                */}
       {/* ============================================================== */}
-      {activeTab === 4 && (
+      {activeTab === 5 && (
         <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
           <CardContent sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>

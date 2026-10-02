@@ -36,6 +36,10 @@ import BusinessIcon from '@mui/icons-material/Business';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import CorporateFareIcon from '@mui/icons-material/CorporateFare';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import SchoolIcon from '@mui/icons-material/School';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import { Link, useLocation } from 'react-router-dom';
@@ -76,6 +80,7 @@ const MENU_GROUPS: NavPrimaryGroup[] = [
         items: [
           { text: 'Plan de Cuentas (PUC VEN-NIF)', icon: <AccountTreeIcon />, path: '/cuentas' },
           { text: 'Centros de Costo', icon: <DomainIcon />, path: '/cuentas?tab=centros' },
+          { text: 'Tipos de Documentos', icon: <AssignmentIcon />, path: '/cuentas?tab=documentos' },
         ]
       },
       {
@@ -100,6 +105,7 @@ const MENU_GROUPS: NavPrimaryGroup[] = [
         items: [
           { text: 'Registro de Asientos (Vouchers)', icon: <ReceiptLongIcon />, path: '/asientos' },
           { text: 'Comprobantes Modelo (Plantillas)', icon: <AutoAwesomeIcon />, path: '/asientos?tab=modelos' },
+          { text: 'Procesamiento por Lote', icon: <PlayArrowIcon />, path: '/asientos?tab=lote' },
         ]
       },
       {
@@ -114,7 +120,23 @@ const MENU_GROUPS: NavPrimaryGroup[] = [
     ]
   },
   {
-    title: '3. Fiscal & SENIAT',
+    title: '3. Activos Fijos & PPE',
+    key: 'activos',
+    icon: <PrecisionManufacturingIcon />,
+    subsections: [
+      {
+        subtitle: 'Control Patrimonial',
+        key: 'activos_fijos',
+        items: [
+          { text: 'Catálogo de Activos Fijos', icon: <PrecisionManufacturingIcon />, path: '/activos-fijos' },
+          { text: 'Grupos & Ubicaciones', icon: <DomainIcon />, path: '/activos-fijos?tab=grupos' },
+          { text: 'Cálculo de Depreciación', icon: <TrendingDownIcon />, path: '/activos-fijos?tab=depreciacion' },
+        ]
+      }
+    ]
+  },
+  {
+    title: '4. Fiscal & SENIAT',
     key: 'fiscal',
     icon: <ReceiptIcon />,
     subsections: [
@@ -130,7 +152,7 @@ const MENU_GROUPS: NavPrimaryGroup[] = [
     ]
   },
   {
-    title: '4. Reportes & Balances',
+    title: '5. Reportes & Balances',
     key: 'reportes',
     icon: <AssessmentIcon />,
     subsections: [
@@ -146,7 +168,7 @@ const MENU_GROUPS: NavPrimaryGroup[] = [
     ]
   },
   {
-    title: '5. Gobernanza & Despachos',
+    title: '6. Gobernanza & Despachos',
     key: 'gobernanza',
     icon: <BusinessIcon />,
     subsections: [
@@ -162,6 +184,20 @@ const MENU_GROUPS: NavPrimaryGroup[] = [
         ]
       }
     ]
+  },
+  {
+    title: '7. Ayuda & Documentación',
+    key: 'ayuda',
+    icon: <SchoolIcon />,
+    subsections: [
+      {
+        subtitle: 'Capacitación & Soporte',
+        key: 'soporte',
+        items: [
+          { text: 'Guía de Procesos & FAQ', icon: <SchoolIcon />, path: '/guia' },
+        ]
+      }
+    ]
   }
 ];
 
@@ -173,9 +209,11 @@ export const Sidebar: React.FC<{ open: boolean; onClose: () => void }> = ({ open
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     maestros: true,
     procesos: true,
+    activos: true,
     fiscal: true,
     reportes: true,
     gobernanza: false,
+    ayuda: true,
   });
 
   const toggleGroup = (key: string) => {

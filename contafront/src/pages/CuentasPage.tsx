@@ -43,6 +43,7 @@ import DomainIcon from '@mui/icons-material/Domain';
 import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import GroupIcon from '@mui/icons-material/Group';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 import DownloadIcon from '@mui/icons-material/Download';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -69,6 +70,7 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
     monedas: 2,
     bancos: 3,
     auxiliares: 4,
+    documentos: 5,
   };
 
   const indexTabMap: Record<number, string> = {
@@ -77,6 +79,7 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
     2: 'monedas',
     3: 'bancos',
     4: 'auxiliares',
+    5: 'documentos',
   };
 
   const [activeTab, setActiveTab] = useState(tabIndexMap[tabParam] || 0);
@@ -464,6 +467,61 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
     }
   };
 
+  // --- TAB 5: TIPOS DE DOCUMENTO CONTABLES ---
+  const [tiposDocData, setTiposDocData] = useState([
+    { id: 'td-1', codigo: 'FACT', descripcion: 'FACTURA DE VENTA / COMPRA' },
+    { id: 'td-2', codigo: 'DEPC', descripcion: 'DEPÓSITOS DE CAJA / BANCARIOS' },
+    { id: 'td-3', codigo: 'DEVC', descripcion: 'DEVOLUCIONES DE CLIENTES' },
+    { id: 'td-4', codigo: 'DEVP', descripcion: 'DEVOLUCIONES DE PROVEEDORES' },
+    { id: 'td-5', codigo: 'GIRO', descripcion: 'GIROS / EFECTOS COMERCIALES' },
+    { id: 'td-6', codigo: 'NC', descripcion: 'NOTA DE CRÉDITO' },
+    { id: 'td-7', codigo: 'ND', descripcion: 'NOTA DE DÉBITO' },
+    { id: 'td-8', codigo: 'CHQ', descripcion: 'CHEQUES EMITIDOS / RECIBIDOS' },
+    { id: 'td-9', codigo: 'TRANSF', descripcion: 'TRANSFERENCIA BANCARIA ELECTRÓNICA' },
+    { id: 'td-10', codigo: 'RETIVA', descripcion: 'COMPROBANTE DE RETENCIÓN IVA' },
+    { id: 'td-11', codigo: 'RETISLR', descripcion: 'COMPROBANTE DE RETENCIÓN ISLR' },
+    { id: 'td-12', codigo: 'AJUC', descripcion: 'AJUSTES DE CLIENTES' },
+    { id: 'td-13', codigo: 'AJUP', descripcion: 'AJUSTES DE PROVEEDORES' },
+  ]);
+  const [modalTipoDocOpen, setModalTipoDocOpen] = useState(false);
+  const [tipoDocEditando, setTipoDocEditando] = useState<any | null>(null);
+  const [tipoDocForm, setTipoDocForm] = useState({ codigo: '', descripcion: '' });
+
+  const handleOpenTipoDocModal = (doc?: any) => {
+    if (doc) {
+      setTipoDocEditando(doc);
+      setTipoDocForm({ codigo: doc.codigo, descripcion: doc.descripcion });
+    } else {
+      setTipoDocEditando(null);
+      setTipoDocForm({ codigo: '', descripcion: '' });
+    }
+    setModalTipoDocOpen(true);
+  };
+
+  const handleSaveTipoDoc = () => {
+    if (!tipoDocForm.codigo || !tipoDocForm.descripcion) {
+      alert('Código y descripción son obligatorios.');
+      return;
+    }
+    if (tipoDocEditando) {
+      setTiposDocData((prev) =>
+        prev.map((d) => (d.id === tipoDocEditando.id ? { ...d, ...tipoDocForm } : d))
+      );
+      setToastMessage(`Tipo de documento ${tipoDocForm.codigo} actualizado.`);
+    } else {
+      setTiposDocData((prev) => [...prev, { ...tipoDocForm, id: `td-${Date.now()}` }]);
+      setToastMessage(`Tipo de documento ${tipoDocForm.codigo} registrado.`);
+    }
+    setModalTipoDocOpen(false);
+  };
+
+  const handleDeleteTipoDoc = (id: string, codigo: string) => {
+    if (window.confirm(`¿Desea eliminar el tipo de documento ${codigo}?`)) {
+      setTiposDocData((prev) => prev.filter((d) => d.id !== id));
+      setToastMessage(`Tipo de documento ${codigo} eliminado.`);
+    }
+  };
+
   return (
     <Box>
       {/* Notificaciones */}
@@ -505,6 +563,7 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
           <Tab icon={<CurrencyExchangeIcon />} iconPosition="start" label="Monedas & Tasas BCV" />
           <Tab icon={<AccountBalanceIcon />} iconPosition="start" label="Bancos & Tesorería" />
           <Tab icon={<GroupIcon />} iconPosition="start" label="Auxiliares (Terceros)" />
+          <Tab icon={<AssignmentIcon />} iconPosition="start" label="Tipos de Documentos" />
         </Tabs>
       </Paper>
 
@@ -1038,6 +1097,103 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
           </CardContent>
         </Card>
       )}
+
+      {/* ============================================================== */}
+      {/* TAB 5: TIPOS DE DOCUMENTOS CONTABLES                           */}
+      {/* ============================================================== */}
+      {activeTab === 5 && (
+        <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
+          <CardContent sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Box>
+                <Typography variant="h6" fontWeight="bold">
+                  Maestro de Tipos de Documentos Soporte ({tiposDocData.length} Tipos)
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Documentos legales y comerciales que respaldan las operaciones contables (Facturas, Giros, Retenciones, Notas de Crédito/Débito).
+                </Typography>
+              </Box>
+              <Button
+                variant="contained"
+                startIcon={<AddCircleOutlineIcon />}
+                size="small"
+                onClick={() => handleOpenTipoDocModal()}
+              >
+                Nuevo Tipo de Documento
+              </Button>
+            </Box>
+
+            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e3e8ef', borderRadius: 2 }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Código</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Descripción del Documento</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Acciones</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {tiposDocData.map((doc) => (
+                    <TableRow key={doc.id} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
+                        <Chip label={doc.codigo} size="small" color="primary" variant="outlined" />
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 500 }}>{doc.descripcion}</TableCell>
+                      <TableCell sx={{ textAlign: 'center' }}>
+                        <Tooltip title="Modificar tipo de documento">
+                          <IconButton size="small" color="primary" onClick={() => handleOpenTipoDocModal(doc)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Eliminar tipo de documento">
+                          <IconButton size="small" color="error" onClick={() => handleDeleteTipoDoc(doc.id, doc.codigo)}>
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* --- MODAL TIPO DE DOCUMENTO --- */}
+      <Dialog open={modalTipoDocOpen} onClose={() => setModalTipoDocOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>
+          {tipoDocEditando ? 'Editar Tipo de Documento' : 'Nuevo Tipo de Documento'}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Código de Documento"
+                placeholder="ej: FACT, RETIVA, ND"
+                value={tipoDocForm.codigo}
+                onChange={(e) => setTipoDocForm({ ...tipoDocForm, codigo: e.target.value.toUpperCase() })}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Descripción del Documento"
+                placeholder="ej: FACTURA FISCAL DE VENTA"
+                value={tipoDocForm.descripcion}
+                onChange={(e) => setTipoDocForm({ ...tipoDocForm, descripcion: e.target.value })}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setModalTipoDocOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleSaveTipoDoc}>Guardar Documento</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* --- MODAL DE CUENTA PUC --- */}
       <Dialog open={modalCuentaOpen} onClose={() => setModalCuentaOpen(false)} maxWidth="sm" fullWidth>

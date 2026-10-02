@@ -11,6 +11,8 @@ import { AsientosPage } from './pages/AsientosPage';
 import { FiscalPage } from './pages/FiscalPage';
 import { ReportesPage } from './pages/ReportesPage';
 import { EmpresasPage } from './pages/EmpresasPage';
+import { ActivosFijosPage } from './pages/ActivosFijosPage';
+import { GuiaUsoPage } from './pages/GuiaUsoPage';
 
 import { LoginPage } from './pages/LoginPage';
 import { useAuthStore } from './store/useAuthStore';
@@ -34,13 +36,18 @@ const ProtectedRoutes: React.FC = () => {
         <Route path="/monedas" element={<CuentasPage initialTab="monedas" />} />
         <Route path="/bancos" element={<CuentasPage initialTab="bancos" />} />
         <Route path="/auxiliares" element={<CuentasPage initialTab="auxiliares" />} />
+        <Route path="/tipos-documento" element={<CuentasPage initialTab="documentos" />} />
 
         {/* Modulo 2: Procesos Contables */}
         <Route path="/asientos" element={<AsientosPage />} />
         <Route path="/comprobantes-modelo" element={<AsientosPage initialTab="modelos" />} />
+        <Route path="/procesar-lote" element={<AsientosPage initialTab="lote" />} />
         <Route path="/cierres" element={<AsientosPage initialTab="cierres" />} />
         <Route path="/ajuste-inflacion" element={<AsientosPage initialTab="inflacion" />} />
         <Route path="/integraciones" element={<AsientosPage initialTab="integraciones" />} />
+
+        {/* Modulo Activos Fijos & PPE */}
+        <Route path="/activos-fijos" element={<ActivosFijosPage />} />
 
         {/* Modulo 3: Fiscal & SENIAT */}
         <Route path="/fiscal" element={<FiscalPage />} />
@@ -57,6 +64,9 @@ const ProtectedRoutes: React.FC = () => {
         <Route path="/estudios" element={<EstudiosPage />} />
         <Route path="/consolidacion" element={<EstudiosPage initialTab="holding" />} />
         <Route path="/usuarios" element={<EstudiosPage initialTab="usuarios" />} />
+
+        {/* Centro de Ayuda & Guía */}
+        <Route path="/guia" element={<GuiaUsoPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

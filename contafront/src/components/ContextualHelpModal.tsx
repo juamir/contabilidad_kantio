@@ -71,7 +71,17 @@ export const ContextualHelpModal: React.FC<ContextualHelpModalProps> = ({
         )}
       </DialogContent>
       <Divider />
-      <DialogActions sx={{ p: 2 }}>
+      <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
+        <Button
+          component="a"
+          href="/guia"
+          onClick={onClose}
+          variant="outlined"
+          color="primary"
+          size="small"
+        >
+          Ver Guía Completa & FAQ
+        </Button>
         <Button onClick={onClose} variant="contained" color="primary">
           Entendido
         </Button>
