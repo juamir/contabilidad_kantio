@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: kantio_conta_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_DB: ${POSTGRES_DB:-kantio_contabilidad}
+    ports:
+      - "5434:5432"
+    volumes:
+      - conta_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./contaback
+      dockerfile: Dockerfile
+    container_name: kantio_conta_back
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres123@db:5432/kantio_contabilidad
+      SECRET_KEY: ${SECRET_KEY:-supersecret_jwt_key_kantio_conta_2026}
+      KANTIO_CORE_URL: https://api.kantio.online
+      ENVIRONMENT: development
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./contaback:/app
+
+  frontend:
+    build:
+      context: ./contafront
+      dockerfile: Dockerfile
+    container_name: kantio_conta_front
+    restart: always
+    ports:
+      - "5174:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8001/api/v1
+    volumes:
+      - ./contafront:/app
+      - /app/node_modules
+
+volumes:
+  conta_pgdata:

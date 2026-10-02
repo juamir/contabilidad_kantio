@@ -1,0 +1,50 @@
+http:
+  routers:
+    kantio-conta-api-router:
+      rule: Host(`contabilidad.kantio.online`) && (PathPrefix(`/api`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))
+      priority: 100
+      service: kantio-conta-api-service
+      entryPoints:
+        - web
+      middlewares:
+        - redirect-to-https
+
+    kantio-conta-api-router-secure:
+      rule: Host(`contabilidad.kantio.online`) && (PathPrefix(`/api`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))
+      priority: 100
+      service: kantio-conta-api-service
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+
+    kantio-conta-web-router:
+      rule: Host(`contabilidad.kantio.online`)
+      priority: 10
+      service: kantio-conta-web-service
+      entryPoints:
+        - web
+      middlewares:
+        - redirect-to-https
+
+    kantio-conta-web-router-secure:
+      rule: Host(`contabilidad.kantio.online`)
+      priority: 10
+      service: kantio-conta-web-service
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    kantio-conta-api-service:
+      loadBalancer:
+        servers:
+          - url: http://kantio-conta-api:8000
+        passHostHeader: true
+
+    kantio-conta-web-service:
+      loadBalancer:
+        servers:
+          - url: http://kantio-conta-web:80
+        passHostHeader: true
