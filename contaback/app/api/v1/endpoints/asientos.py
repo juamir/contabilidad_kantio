@@ -195,3 +195,104 @@ async def asentar_comprobante(
     await db.commit()
     await db.refresh(comp)
     return comp
+
+@router.put("/{comprobante_id}", response_model=ComprobanteOut)
+async def update_comprobante(
+    comprobante_id: UUID,
+    comp_in: ComprobanteCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    if current_user.rol == "AUDITOR_EXTERNO":
+        raise HTTPException(status_code=403, detail="Los auditores externos no pueden modificar comprobantes.")
+
+    stmt = select(Comprobante).options(selectinload(Comprobante.renglones)).where(Comprobante.id == comprobante_id)
+    comp = (await db.execute(stmt)).scalars().first()
+    if not comp:
+        raise HTTPException(status_code=404, detail="Comprobante no encontrado.")
+
+    if comp.estado == "ASENTADO":
+        raise HTTPException(status_code=400, detail="No se puede modificar un comprobante ya ASENTADO. Debe crear un asiento de ajuste o reversión.")
+    if comp.estado == "ANULADO":
+        raise HTTPException(status_code=400, detail="No se puede modificar un comprobante ANULADO.")
+
+    # Actualizar cabecera
+    comp.numero = comp_in.numero
+    comp.fecha = comp_in.fecha
+    comp.tipo = comp_in.tipo
+    comp.concepto = comp_in.concepto
+    comp.tasa_cambio = comp_in.tasa_cambio
+    comp.estado = comp_in.estado
+
+    # Calcular totales
+    comp.total_debito_base = sum(r.monto_debito_base for r in comp_in.renglones)
+    comp.total_credito_base = sum(r.monto_credito_base for r in comp_in.renglones)
+    comp.total_debito_divisa = sum(r.monto_debito_divisa for r in comp_in.renglones)
+    comp.total_credito_divisa = sum(r.monto_credito_divisa for r in comp_in.renglones)
+
+    # Reemplazar renglones
+    comp.renglones.clear()
+    await db.flush()
+
+    for r in comp_in.renglones:
+        renglon = ComprobanteRenglon(
+            comprobante_id=comp.id,
+            empresa_id=comp.empresa_id,
+            numero_linea=r.numero_linea,
+            cuenta_id=r.cuenta_id,
+            descripcion=r.descripcion,
+            auxiliar_id=r.auxiliar_id,
+            centro_costo_id=r.centro_costo_id,
+            tipo_documento=r.tipo_documento,
+            numero_documento=r.numero_documento,
+            monto_debito_base=r.monto_debito_base,
+            monto_credito_base=r.monto_credito_base,
+            monto_debito_divisa=r.monto_debito_divisa,
+            monto_credito_divisa=r.monto_credito_divisa
+        )
+        db.add(renglon)
+
+    await db.commit()
+    await db.refresh(comp)
+    return comp
+
+@router.post("/{comprobante_id}/anular", response_model=ComprobanteOut)
+async def anular_comprobante(
+    comprobante_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    if current_user.rol in ["AUDITOR_EXTERNO", "ASISTENTE_CONTABLE"]:
+        raise HTTPException(status_code=403, detail="No tiene permisos para anular comprobantes contables.")
+
+    stmt = select(Comprobante).options(selectinload(Comprobante.renglones)).where(Comprobante.id == comprobante_id)
+    comp = (await db.execute(stmt)).scalars().first()
+    if not comp:
+        raise HTTPException(status_code=404, detail="Comprobante no encontrado.")
+
+    comp.estado = "ANULADO"
+    await db.commit()
+    await db.refresh(comp)
+    return comp
+
+@router.delete("/{comprobante_id}", status_code=status.HTTP_200_OK)
+async def delete_comprobante(
+    comprobante_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    if current_user.rol in ["AUDITOR_EXTERNO", "ASISTENTE_CONTABLE"]:
+        raise HTTPException(status_code=403, detail="No tiene permisos para eliminar comprobantes.")
+
+    stmt = select(Comprobante).where(Comprobante.id == comprobante_id)
+    comp = (await db.execute(stmt)).scalars().first()
+    if not comp:
+        raise HTTPException(status_code=404, detail="Comprobante no encontrado.")
+
+    if comp.estado == "ASENTADO":
+        raise HTTPException(status_code=400, detail="Por normas VEN-NIF y trazabilidad fiscal, un comprobante ASENTADO no puede ser eliminado físicamente. Debe ser ANULADO.")
+
+    await db.delete(comp)
+    await db.commit()
+    return {"status": "success", "message": "Comprobante eliminado con éxito.", "id": str(comprobante_id)}
+

@@ -91,3 +91,66 @@ async def get_empresa(
     if not empresa:
         raise HTTPException(status_code=404, detail="Empresa no encontrada.")
     return empresa
+
+@router.put("/{empresa_id}", response_model=EmpresaOut)
+async def update_empresa(
+    empresa_id: UUID,
+    empresa_in: EmpresaUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    empresa = await db.get(Empresa, empresa_id)
+    if not empresa:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada.")
+
+    data = empresa_in.dict(exclude_unset=True)
+    for field, val in data.items():
+        setattr(empresa, field, val)
+
+    await db.commit()
+    await db.refresh(empresa)
+    return empresa
+
+@router.delete("/{empresa_id}", status_code=status.HTTP_200_OK)
+async def delete_empresa(
+    empresa_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    empresa = await db.get(Empresa, empresa_id)
+    if not empresa:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada.")
+
+    empresa.activo = False
+    await db.commit()
+    return {"status": "success", "message": "Empresa desactivada.", "id": str(empresa_id)}
+
+@router.get("/grupos/todos", response_model=List[GrupoEmpresarialOut])
+async def list_grupos_empresariales(
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    stmt = select(GrupoEmpresarial).where(GrupoEmpresarial.activo == True)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+@router.post("/grupos/", response_model=GrupoEmpresarialOut, status_code=status.HTTP_201_CREATED)
+async def create_grupo_empresarial(
+    grupo_in: GrupoEmpresarialCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    stmt = select(GrupoEmpresarial).where(GrupoEmpresarial.codigo == grupo_in.codigo)
+    if (await db.execute(stmt)).scalars().first():
+        raise HTTPException(status_code=400, detail="Ya existe un grupo empresarial con este código.")
+
+    grupo = GrupoEmpresarial(
+        codigo=grupo_in.codigo,
+        nombre=grupo_in.nombre,
+        activo=True
+    )
+    db.add(grupo)
+    await db.commit()
+    await db.refresh(grupo)
+    return grupo
+

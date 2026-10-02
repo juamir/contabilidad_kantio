@@ -23,7 +23,14 @@ import {
   FormControl,
   InputLabel,
   Select,
-  Stack
+  Stack,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Snackbar
 } from '@mui/material';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
@@ -32,11 +39,28 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
-import ContentPasteIcon from '@mui/icons-material/ContentPaste';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useSearchParams } from 'react-router-dom';
 
 interface Props {
   initialTab?: string;
+}
+
+interface FacturaFiscalUI {
+  id: string;
+  fecha: string;
+  tipo: 'COMPRA' | 'VENTA';
+  rif: string;
+  nombre: string;
+  factura: string;
+  control: string;
+  total: number;
+  base: number;
+  iva: number;
+  ret_iva: number;
+  ret_islr: number;
 }
 
 export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
@@ -68,8 +92,10 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
     setSearchParams({ tab: indexTabMap[newValue] });
   };
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
   // --- TAB 0: CALCULADORA Y RETENCIONES ---
-  const [tipoOp, setTipoOp] = useState('COMPRA');
+  const [tipoOp, setTipoOp] = useState<'COMPRA' | 'VENTA'>('COMPRA');
   const [rifTercero, setRifTercero] = useState('J-30456789-1');
   const [nombreTercero, setNombreTercero] = useState('Servicios Tecnológicos C.A.');
   const [numeroFactura, setNumeroFactura] = useState('0001245');
@@ -102,19 +128,154 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
     }, 1200);
   };
 
-  // --- TAB 1: TXT SENIAT EXP EXPORTACIÓN ---
+  // --- LISTA DE FACTURAS FISCALES PARA LIBROS Y TXT ---
+  const [facturas, setFacturas] = useState<FacturaFiscalUI[]>([
+    { id: '1', fecha: '2026-10-02', tipo: 'COMPRA', rif: 'J-30111222-3', nombre: 'PROVEEDORA NACIONAL DE ALIMENTOS C.A.', factura: '0001245', control: '00-008912', total: 5800.00, base: 5000.00, iva: 800.00, ret_iva: 600.00, ret_islr: 100.00 },
+    { id: '2', fecha: '2026-10-04', tipo: 'COMPRA', rif: 'J-40998877-1', nombre: 'DISTRIBUIDORA Y SUMINISTROS CARACAS S.A.', factura: '0004562', control: '00-001290', total: 3480.00, base: 3000.00, iva: 480.00, ret_iva: 360.00, ret_islr: 60.00 },
+    { id: '3', fecha: '2026-10-07', tipo: 'COMPRA', rif: 'J-31456789-0', nombre: 'DESPACHO CONTABLE Y AUDITORES ALPHA & ASOC.', factura: '0000890', control: '00-009911', total: 8120.00, base: 7000.00, iva: 1120.00, ret_iva: 840.00, ret_islr: 210.00 },
+    { id: '4', fecha: '2026-10-01', tipo: 'VENTA', rif: 'V-14555666-0', nombre: 'CLIENTE GENERAL DE CONTADO (TIENDA)', factura: '0000001', control: '00-000001', total: 4640.00, base: 4000.00, iva: 640.00, ret_iva: 0.00, ret_islr: 0.00 },
+    { id: '5', fecha: '2026-10-05', tipo: 'VENTA', rif: 'J-50123456-7', nombre: 'INVERSIONES SAN CRISTOBAL S.A.', factura: '0000002', control: '00-000002', total: 9280.00, base: 8000.00, iva: 1280.00, ret_iva: 960.00, ret_islr: 160.00 },
+  ]);
+
+  const handleGenerarComprobanteRetencion = () => {
+    const nueva: FacturaFiscalUI = {
+      id: Date.now().toString(),
+      fecha: new Date().toISOString().split('T')[0],
+      tipo: tipoOp,
+      rif: rifTercero,
+      nombre: nombreTercero,
+      factura: numeroFactura,
+      control: numeroControl,
+      total: montoTotal,
+      base: baseImponible,
+      iva: montoIva,
+      ret_iva: montoRetIva,
+      ret_islr: montoRetIslr,
+    };
+    setFacturas((prev) => [nueva, ...prev]);
+    setToastMessage(`Comprobante fiscal registrado con éxito (Factura #${numeroFactura}).`);
+  };
+
+  // Modal para crear / editar factura directamente desde los libros
+  const [modalFacturaOpen, setModalFacturaOpen] = useState(false);
+  const [facturaEditando, setFacturaEditando] = useState<FacturaFiscalUI | null>(null);
+  const [facturaForm, setFacturaForm] = useState({
+    fecha: new Date().toISOString().split('T')[0],
+    tipo: 'COMPRA' as 'COMPRA' | 'VENTA',
+    rif: '',
+    nombre: '',
+    factura: '',
+    control: '',
+    base: 1000,
+    alicuota: 16,
+    porc_ret_iva: 75,
+    porc_ret_islr: 2
+  });
+
+  const handleOpenFacturaModal = (f?: FacturaFiscalUI) => {
+    if (f) {
+      setFacturaEditando(f);
+      setFacturaForm({
+        fecha: f.fecha,
+        tipo: f.tipo,
+        rif: f.rif,
+        nombre: f.nombre,
+        factura: f.factura,
+        control: f.control,
+        base: f.base,
+        alicuota: 16,
+        porc_ret_iva: f.base > 0 ? Math.round((f.ret_iva / f.iva) * 100) : 75,
+        porc_ret_islr: f.base > 0 ? Math.round((f.ret_islr / f.base) * 100) : 2
+      });
+    } else {
+      setFacturaEditando(null);
+      setFacturaForm({
+        fecha: new Date().toISOString().split('T')[0],
+        tipo: subtipoLibro === 'COMPRAS' ? 'COMPRA' : 'VENTA',
+        rif: 'J-',
+        nombre: '',
+        factura: `FAC-${Date.now().toString().slice(-4)}`,
+        control: `00-${Date.now().toString().slice(-6)}`,
+        base: 2000,
+        alicuota: 16,
+        porc_ret_iva: subtipoLibro === 'COMPRAS' ? 75 : 0,
+        porc_ret_islr: subtipoLibro === 'COMPRAS' ? 2 : 0
+      });
+    }
+    setModalFacturaOpen(true);
+  };
+
+  const handleSaveFactura = () => {
+    if (!facturaForm.rif || !facturaForm.nombre || !facturaForm.factura) {
+      alert('RIF, Nombre y Número de Factura son requeridos.');
+      return;
+    }
+    const calcIva = Number((facturaForm.base * (facturaForm.alicuota / 100)).toFixed(2));
+    const calcTotal = Number((facturaForm.base + calcIva).toFixed(2));
+    const calcRetIva = Number((calcIva * (facturaForm.porc_ret_iva / 100)).toFixed(2));
+    const calcRetIslr = Number((facturaForm.base * (facturaForm.porc_ret_islr / 100)).toFixed(2));
+
+    if (facturaEditando) {
+      setFacturas((prev) =>
+        prev.map((item) =>
+          item.id === facturaEditando.id
+            ? {
+                ...item,
+                fecha: facturaForm.fecha,
+                tipo: facturaForm.tipo,
+                rif: facturaForm.rif,
+                nombre: facturaForm.nombre,
+                factura: facturaForm.factura,
+                control: facturaForm.control,
+                base: facturaForm.base,
+                iva: calcIva,
+                total: calcTotal,
+                ret_iva: calcRetIva,
+                ret_islr: calcRetIslr
+              }
+            : item
+        )
+      );
+      setToastMessage(`Factura fiscal ${facturaForm.factura} actualizada.`);
+    } else {
+      const nueva: FacturaFiscalUI = {
+        id: Date.now().toString(),
+        fecha: facturaForm.fecha,
+        tipo: facturaForm.tipo,
+        rif: facturaForm.rif,
+        nombre: facturaForm.nombre,
+        factura: facturaForm.factura,
+        control: facturaForm.control,
+        base: facturaForm.base,
+        iva: calcIva,
+        total: calcTotal,
+        ret_iva: calcRetIva,
+        ret_islr: calcRetIslr
+      };
+      setFacturas((prev) => [nueva, ...prev]);
+      setToastMessage(`Factura fiscal ${facturaForm.factura} agregada.`);
+    }
+    setModalFacturaOpen(false);
+  };
+
+  const handleDeleteFactura = (id: string, numero: string) => {
+    if (window.confirm(`¿Está seguro de eliminar la factura ${numero}?`)) {
+      setFacturas((prev) => prev.filter((f) => f.id !== id));
+      setToastMessage(`Factura ${numero} eliminada.`);
+    }
+  };
+
+  // --- TAB 1: TXT SENIAT EXPORTACIÓN ---
   const [periodoTxt, setPeriodoTxt] = useState('202610');
   const [quincenaTxt, setQuincenaTxt] = useState('1');
 
-  const lineasTxtDemo = [
-    `J501234567\t${periodoTxt}\t2026-10-02\tC\t01\tJ301112223\t0001245\t00-008912\t5800.00\t5000.00\t800.00\t${periodoTxt}00000001\t600.00\t0\t0.00\t16.00`,
-    `J501234567\t${periodoTxt}\t2026-10-04\tC\t01\tJ409988771\t0004562\t00-001290\t3480.00\t3000.00\t480.00\t${periodoTxt}00000002\t360.00\t0\t0.00\t16.00`,
-    `J501234567\t${periodoTxt}\t2026-10-07\tC\t01\tJ314567890\t0000890\t00-009911\t8120.00\t7000.00\t1120.00\t${periodoTxt}00000003\t840.00\t0\t0.00\t16.00`,
-    `J501234567\t${periodoTxt}\t2026-10-11\tC\t01\tV189998882\t0000112\t00-000443\t1740.00\t1500.00\t240.00\t${periodoTxt}00000004\t240.00\t0\t0.00\t16.00`,
-  ];
+  const comprasConRetencion = facturas.filter((f) => f.tipo === 'COMPRA' && f.ret_iva > 0);
+  const lineasTxt = comprasConRetencion.map((c, i) =>
+    `J501234567\t${periodoTxt}\t${c.fecha}\tC\t01\t${c.rif.replace(/-/g, '')}\t${c.factura}\t${c.control}\t${c.total.toFixed(2)}\t${c.base.toFixed(2)}\t${c.iva.toFixed(2)}\t${periodoTxt}0000000${i + 1}\t${c.ret_iva.toFixed(2)}\t0\t0.00\t16.00`
+  );
 
   const handleDescargarTXT = () => {
-    const rawContent = lineasTxtDemo.join('\r\n');
+    const rawContent = lineasTxt.join('\r\n');
     const blob = new Blob([rawContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -126,20 +287,23 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
 
   // --- TAB 2: LIBROS DE COMPRAS Y VENTAS ---
   const [subtipoLibro, setSubtipoLibro] = useState<'COMPRAS' | 'VENTAS'>('COMPRAS');
-
-  const comprasFiscales = [
-    { fecha: '2026-10-02', rif: 'J-30111222-3', proveedor: 'PROVEEDORA NACIONAL DE ALIMENTOS C.A.', factura: '0001245', control: '00-008912', total: 5800.00, base: 5000.00, iva: 800.00, ret_iva: 600.00, ret_islr: 100.00 },
-    { fecha: '2026-10-04', rif: 'J-40998877-1', proveedor: 'DISTRIBUIDORA Y SUMINISTROS CARACAS S.A.', factura: '0004562', control: '00-001290', total: 3480.00, base: 3000.00, iva: 480.00, ret_iva: 360.00, ret_islr: 60.00 },
-    { fecha: '2026-10-07', rif: 'J-31456789-0', proveedor: 'DESPACHO CONTABLE Y AUDITORES ALPHA & ASOC.', factura: '0000890', control: '00-009911', total: 8120.00, base: 7000.00, iva: 1120.00, ret_iva: 840.00, ret_islr: 210.00 },
-  ];
-
-  const ventasFiscales = [
-    { fecha: '2026-10-01', rif: 'V-14555666-0', cliente: 'CLIENTE GENERAL DE CONTADO (TIENDA)', factura: '0000001', control: '00-000001', total: 4640.00, base: 4000.00, iva: 640.00, ret_iva: 0.00, ret_islr: 0.00 },
-    { fecha: '2026-10-05', rif: 'J-50123456-7', cliente: 'INVERSIONES SAN CRISTOBAL S.A.', factura: '0000002', control: '00-000002', total: 9280.00, base: 8000.00, iva: 1280.00, ret_iva: 960.00, ret_islr: 160.00 },
-  ];
+  const facturasFiltradasLibro = facturas.filter((f) =>
+    subtipoLibro === 'COMPRAS' ? f.tipo === 'COMPRA' : f.tipo === 'VENTA'
+  );
 
   return (
     <Box>
+      <Snackbar
+        open={!!toastMessage}
+        autoHideDuration={4000}
+        onClose={() => setToastMessage(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert severity="success" onClose={() => setToastMessage(null)}>
+          {toastMessage}
+        </Alert>
+      </Snackbar>
+
       <Box sx={{ mb: 2 }}>
         <Typography variant="h5" fontWeight="bold">
           3. Cumplimiento Fiscal & SENIAT
@@ -199,7 +363,14 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
 
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
-                      <TextField fullWidth size="small" select label="Tipo de Operación" value={tipoOp} onChange={(e) => setTipoOp(e.target.value)}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        select
+                        label="Tipo de Operación"
+                        value={tipoOp}
+                        onChange={(e) => setTipoOp(e.target.value as any)}
+                      >
                         <MenuItem value="COMPRA">COMPRA - Proveedor (Sujeto Pasivo Retención)</MenuItem>
                         <MenuItem value="VENTA">VENTA - Cliente</MenuItem>
                       </TextField>
@@ -293,7 +464,14 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
                   </Box>
 
                   <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                    <Button variant="contained" color="primary" fullWidth startIcon={<CalculateIcon />} sx={{ textTransform: 'none', fontWeight: 'bold' }}>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      fullWidth
+                      startIcon={<CalculateIcon />}
+                      onClick={handleGenerarComprobanteRetencion}
+                      sx={{ textTransform: 'none', fontWeight: 'bold' }}
+                    >
                       Generar Comprobante de Retención
                     </Button>
                   </Box>
@@ -346,7 +524,7 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
               <Grid item xs={12} sm={4}>
                 <Box sx={{ p: 1, bgcolor: '#f1f5f9', borderRadius: 1 }}>
                   <Typography variant="caption" color="text.secondary">Registros Compilados:</Typography>
-                  <Typography variant="subtitle2" fontWeight="bold">4 Facturas Sujetas a Retención</Typography>
+                  <Typography variant="subtitle2" fontWeight="bold">{lineasTxt.length} Facturas con Retención</Typography>
                 </Box>
               </Grid>
             </Grid>
@@ -356,7 +534,7 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
             </Typography>
 
             <Paper variant="outlined" sx={{ p: 2, bgcolor: '#1e293b', color: '#f8fafc', borderRadius: 2, fontFamily: 'monospace', fontSize: '0.8rem', overflowX: 'auto', mb: 3 }}>
-              {lineasTxtDemo.map((line, idx) => (
+              {lineasTxt.map((line, idx) => (
                 <Box key={idx} sx={{ py: 0.5, borderBottom: '1px dashed #334155' }}>
                   {line}
                 </Box>
@@ -371,12 +549,12 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
       )}
 
       {/* ============================================================== */}
-      {/* TAB 2: LIBROS DE COMPRAS Y VENTAS                              */}
+      {/* TAB 2: LIBROS DE COMPRAS Y VENTAS                             */}
       {/* ============================================================== */}
       {activeTab === 2 && (
         <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
           <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
               <Box>
                 <Typography variant="h6" fontWeight="bold">
                   Libros Oficiales del Impuesto al Valor Agregado (IVA)
@@ -385,7 +563,7 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
                   Reportes legales foliados conforme al Reglamento de la Ley del IVA y Código Orgánico Tributario.
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
                 <Button
                   variant={subtipoLibro === 'COMPRAS' ? 'contained' : 'outlined'}
                   size="small"
@@ -400,91 +578,201 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
                 >
                   Libro de Ventas
                 </Button>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  size="small"
+                  startIcon={<AddCircleOutlineIcon />}
+                  onClick={() => handleOpenFacturaModal()}
+                >
+                  Nueva Factura
+                </Button>
               </Box>
             </Box>
 
-            {subtipoLibro === 'COMPRAS' ? (
-              <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e3e8ef', borderRadius: 2 }}>
-                <Table size="small">
-                  <TableHead sx={{ bgcolor: '#f8fafc' }}>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Fecha</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>RIF Proveedor</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Nombre o Razón Social</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>N° Factura</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>N° Control</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Total Compra</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Base Imponible</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Crédito Fiscal</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>IVA Retenido</TableCell>
+            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e3e8ef', borderRadius: 2 }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Fecha</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>RIF {subtipoLibro === 'COMPRAS' ? 'Proveedor' : 'Cliente'}</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Nombre o Razón Social</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>N° Factura</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>N° Control</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Total {subtipoLibro === 'COMPRAS' ? 'Compra' : 'Venta'}</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Base Imponible</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>{subtipoLibro === 'COMPRAS' ? 'Crédito' : 'Débito'} Fiscal</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>IVA Retenido</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Acciones</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {facturasFiltradasLibro.map((c) => (
+                    <TableRow key={c.id} hover>
+                      <TableCell sx={{ fontFamily: 'monospace' }}>{c.fecha}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{c.rif}</TableCell>
+                      <TableCell>{c.nombre}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace' }}>{c.factura}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace' }}>{c.control}</TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                        Bs. {c.total.toFixed(2)}
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>Bs. {c.base.toFixed(2)}</TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: subtipoLibro === 'COMPRAS' ? 'primary.main' : 'secondary.main', fontWeight: 'bold' }}>
+                        Bs. {c.iva.toFixed(2)}
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: 'error.main' }}>
+                        Bs. {c.ret_iva.toFixed(2)}
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'center' }}>
+                        <Tooltip title="Modificar factura fiscal">
+                          <IconButton size="small" color="primary" onClick={() => handleOpenFacturaModal(c)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Eliminar factura fiscal">
+                          <IconButton size="small" color="error" onClick={() => handleDeleteFactura(c.id, c.factura)}>
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
                     </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {comprasFiscales.map((c, idx) => (
-                      <TableRow key={idx} hover>
-                        <TableCell sx={{ fontFamily: 'monospace' }}>{c.fecha}</TableCell>
-                        <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{c.rif}</TableCell>
-                        <TableCell>{c.proveedor}</TableCell>
-                        <TableCell sx={{ fontFamily: 'monospace' }}>{c.factura}</TableCell>
-                        <TableCell sx={{ fontFamily: 'monospace' }}>{c.control}</TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>
-                          Bs. {c.total.toFixed(2)}
-                        </TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>Bs. {c.base.toFixed(2)}</TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: 'primary.main', fontWeight: 'bold' }}>
-                          Bs. {c.iva.toFixed(2)}
-                        </TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: 'error.main' }}>
-                          Bs. {c.ret_iva.toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            ) : (
-              <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e3e8ef', borderRadius: 2 }}>
-                <Table size="small">
-                  <TableHead sx={{ bgcolor: '#f8fafc' }}>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Fecha</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>RIF Cliente</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Nombre o Razón Social</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>N° Factura</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>N° Control</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Total Venta</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Base Imponible</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Débito Fiscal</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>IVA Retenido por Cliente</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {ventasFiscales.map((v, idx) => (
-                      <TableRow key={idx} hover>
-                        <TableCell sx={{ fontFamily: 'monospace' }}>{v.fecha}</TableCell>
-                        <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{v.rif}</TableCell>
-                        <TableCell>{v.cliente}</TableCell>
-                        <TableCell sx={{ fontFamily: 'monospace' }}>{v.factura}</TableCell>
-                        <TableCell sx={{ fontFamily: 'monospace' }}>{v.control}</TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>
-                          Bs. {v.total.toFixed(2)}
-                        </TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>Bs. {v.base.toFixed(2)}</TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: 'secondary.main', fontWeight: 'bold' }}>
-                          Bs. {v.iva.toFixed(2)}
-                        </TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: 'success.main' }}>
-                          Bs. {v.ret_iva.toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </CardContent>
         </Card>
       )}
+
+      {/* --- MODAL PARA FACTURA FISCAL --- */}
+      <Dialog open={modalFacturaOpen} onClose={() => setModalFacturaOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>
+          {facturaEditando ? 'Modificar Registro Fiscal' : `Registrar Factura en Libro de ${subtipoLibro}`}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                type="date"
+                label="Fecha de Emisión"
+                value={facturaForm.fecha}
+                onChange={(e) => setFacturaForm({ ...facturaForm, fecha: e.target.value })}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Tipo Operación</InputLabel>
+                <Select
+                  value={facturaForm.tipo}
+                  label="Tipo Operación"
+                  onChange={(e) => setFacturaForm({ ...facturaForm, tipo: e.target.value as any })}
+                >
+                  <MenuItem value="COMPRA">COMPRA (Proveedor)</MenuItem>
+                  <MenuItem value="VENTA">VENTA (Cliente)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={5}>
+              <TextField
+                fullWidth
+                size="small"
+                label="RIF"
+                value={facturaForm.rif}
+                onChange={(e) => setFacturaForm({ ...facturaForm, rif: e.target.value.toUpperCase() })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={7}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Razón Social"
+                value={facturaForm.nombre}
+                onChange={(e) => setFacturaForm({ ...facturaForm, nombre: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="N° Factura"
+                value={facturaForm.factura}
+                onChange={(e) => setFacturaForm({ ...facturaForm, factura: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="N° Control Fiscal"
+                value={facturaForm.control}
+                onChange={(e) => setFacturaForm({ ...facturaForm, control: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                type="number"
+                label="Base Imponible (Bs.)"
+                value={facturaForm.base}
+                onChange={(e) => setFacturaForm({ ...facturaForm, base: Number(e.target.value) })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Alícuota IVA</InputLabel>
+                <Select
+                  value={facturaForm.alicuota}
+                  label="Alícuota IVA"
+                  onChange={(e) => setFacturaForm({ ...facturaForm, alicuota: Number(e.target.value) })}
+                >
+                  <MenuItem value={16}>16% - General</MenuItem>
+                  <MenuItem value={8}>8% - Reducida</MenuItem>
+                  <MenuItem value={31}>31% - Suntuario</MenuItem>
+                  <MenuItem value={0}>0% - Exento</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>% Retención IVA</InputLabel>
+                <Select
+                  value={facturaForm.porc_ret_iva}
+                  label="% Retención IVA"
+                  onChange={(e) => setFacturaForm({ ...facturaForm, porc_ret_iva: Number(e.target.value) })}
+                >
+                  <MenuItem value={0}>0% - Sin Retención</MenuItem>
+                  <MenuItem value={75}>75% - Contribuyente Especial</MenuItem>
+                  <MenuItem value={100}>100% - Total</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>% Retención ISLR</InputLabel>
+                <Select
+                  value={facturaForm.porc_ret_islr}
+                  label="% Retención ISLR"
+                  onChange={(e) => setFacturaForm({ ...facturaForm, porc_ret_islr: Number(e.target.value) })}
+                >
+                  <MenuItem value={0}>0% - Sin Retención</MenuItem>
+                  <MenuItem value={2}>2% - Bienes</MenuItem>
+                  <MenuItem value={3}>3% - Servicios</MenuItem>
+                  <MenuItem value={5}>5% - Honorarios</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setModalFacturaOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleSaveFactura}>Guardar Factura</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

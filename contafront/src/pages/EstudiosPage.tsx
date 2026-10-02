@@ -24,15 +24,22 @@ import {
   TableHead,
   TableRow,
   Divider,
-  Stack
+  Stack,
+  IconButton,
+  Tooltip,
+  Snackbar,
+  FormControl,
+  InputLabel,
+  Select
 } from '@mui/material';
 import BusinessIcon from '@mui/icons-material/Business';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import CorporateFareIcon from '@mui/icons-material/CorporateFare';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
-import SecurityIcon from '@mui/icons-material/Security';
 import KeyIcon from '@mui/icons-material/Key';
 import { useSearchParams } from 'react-router-dom';
 
@@ -47,6 +54,27 @@ interface Delegacion {
   tipoDelegacion: 'OPERATIVO_COMPLETO' | 'AUDITORIA_LECTURA';
   fechaInicio: string;
   estado: 'ACTIVA' | 'REVOCADA';
+}
+
+interface EmpresaGrupoUI {
+  id: string;
+  codigo: string;
+  razon_social: string;
+  rif: string;
+  participacion: string;
+  ingresos_ves: string;
+  activos_ves: string;
+  estado: string;
+}
+
+interface UsuarioRbacUI {
+  id: string;
+  email: string;
+  nombre: string;
+  rol: string;
+  entidad: string;
+  permisos: string;
+  estado: string;
 }
 
 export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
@@ -78,6 +106,8 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
     setSearchParams({ tab: indexTabMap[newValue] });
   };
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
   // --- TAB 0: DELEGACIONES ---
   const [delegaciones, setDelegaciones] = useState<Delegacion[]>([
     {
@@ -100,12 +130,21 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [nuevoRif, setNuevoRif] = useState('');
-  const [nuevoTipo, setNuevoTipo] = useState('OPERATIVO_COMPLETO');
+  const [nuevoNombre, setNuevoNombre] = useState('');
+  const [nuevoTipo, setNuevoTipo] = useState<'OPERATIVO_COMPLETO' | 'AUDITORIA_LECTURA'>('OPERATIVO_COMPLETO');
 
   const handleRevocar = (id: string) => {
     setDelegaciones((prev) =>
       prev.map((d) => (d.id === id ? { ...d, estado: 'REVOCADA' as const } : d))
     );
+    setToastMessage('Acceso de delegación revocado inmediatamente.');
+  };
+
+  const handleEliminarDelegacion = (id: string) => {
+    if (window.confirm('¿Desea remover el registro histórico de este despacho?')) {
+      setDelegaciones((prev) => prev.filter((d) => d.id !== id));
+      setToastMessage('Registro de despacho eliminado.');
+    }
   };
 
   const handleAgregarDelegacion = () => {
@@ -114,35 +153,156 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
       ...prev,
       {
         id: `del-${Date.now()}`,
-        estudioNombre: `Estudio Asesor RIF ${nuevoRif}`,
+        estudioNombre: nuevoNombre || `Despacho Contable RIF ${nuevoRif}`,
         rif: nuevoRif,
-        tipoDelegacion: nuevoTipo as any,
+        tipoDelegacion: nuevoTipo,
         fechaInicio: new Date().toISOString().split('T')[0],
         estado: 'ACTIVA',
       },
     ]);
     setModalOpen(false);
     setNuevoRif('');
+    setNuevoNombre('');
+    setToastMessage(`Despacho ${nuevoRif} autorizado exitosamente.`);
   };
 
   // --- TAB 1: CONSOLIDACIÓN DE HOLDING ---
-  const empresasGrupo = [
-    { codigo: 'EMP-01', razon_social: 'CORPORACION DEMO KANTIO C.A. (MATRIZ)', rif: 'J-50123456-7', participacion: '100%', ingresos_ves: 'Bs. 380.000,00', activos_ves: 'Bs. 1.219.400,00', estado: 'CONSOLIDADA' },
-    { codigo: 'EMP-02', razon_social: 'DISTRIBUIDORA DE ALIMENTOS DEL CENTRO S.A.', rif: 'J-40998877-1', participacion: '85%', ingresos_ves: 'Bs. 210.000,00', activos_ves: 'Bs. 750.000,00', estado: 'CONSOLIDADA' },
-    { codigo: 'EMP-03', razon_social: 'LOGISTICA & TRANSPORTE VALENCIA EXPRESS C.A.', rif: 'J-30111222-3', participacion: '70%', ingresos_ves: 'Bs. 145.000,00', activos_ves: 'Bs. 480.000,00', estado: 'CONSOLIDADA' },
-  ];
+  const [empresasGrupo, setEmpresasGrupo] = useState<EmpresaGrupoUI[]>([
+    { id: '1', codigo: 'EMP-01', razon_social: 'CORPORACION DEMO KANTIO C.A. (MATRIZ)', rif: 'J-50123456-7', participacion: '100%', ingresos_ves: 'Bs. 380.000,00', activos_ves: 'Bs. 1.219.400,00', estado: 'CONSOLIDADA' },
+    { id: '2', codigo: 'EMP-02', razon_social: 'DISTRIBUIDORA DE ALIMENTOS DEL CENTRO S.A.', rif: 'J-40998877-1', participacion: '85%', ingresos_ves: 'Bs. 210.000,00', activos_ves: 'Bs. 750.000,00', estado: 'CONSOLIDADA' },
+    { id: '3', codigo: 'EMP-03', razon_social: 'LOGISTICA & TRANSPORTE VALENCIA EXPRESS C.A.', rif: 'J-30111222-3', participacion: '70%', ingresos_ves: 'Bs. 145.000,00', activos_ves: 'Bs. 480.000,00', estado: 'CONSOLIDADA' },
+  ]);
+
+  const [modalHoldingOpen, setModalHoldingOpen] = useState(false);
+  const [holdingEditando, setHoldingEditando] = useState<EmpresaGrupoUI | null>(null);
+  const [holdingForm, setHoldingForm] = useState({
+    codigo: '',
+    razon_social: '',
+    rif: '',
+    participacion: '100%',
+    ingresos_ves: 'Bs. 0,00',
+    activos_ves: 'Bs. 0,00',
+    estado: 'CONSOLIDADA'
+  });
+
+  const handleOpenHoldingModal = (h?: EmpresaGrupoUI) => {
+    if (h) {
+      setHoldingEditando(h);
+      setHoldingForm({ ...h });
+    } else {
+      setHoldingEditando(null);
+      setHoldingForm({
+        codigo: `EMP-0${empresasGrupo.length + 1}`,
+        razon_social: '',
+        rif: 'J-',
+        participacion: '80%',
+        ingresos_ves: 'Bs. 50.000,00',
+        activos_ves: 'Bs. 200.000,00',
+        estado: 'CONSOLIDADA'
+      });
+    }
+    setModalHoldingOpen(true);
+  };
+
+  const handleSaveHolding = () => {
+    if (!holdingForm.razon_social || !holdingForm.rif) {
+      alert('Razón Social y RIF son obligatorios.');
+      return;
+    }
+    if (holdingEditando) {
+      setEmpresasGrupo((prev) =>
+        prev.map((e) => (e.id === holdingEditando.id ? { ...e, ...holdingForm } : e))
+      );
+      setToastMessage(`Empresa ${holdingForm.razon_social} actualizada en Holding.`);
+    } else {
+      setEmpresasGrupo((prev) => [...prev, { ...holdingForm, id: Date.now().toString() }]);
+      setToastMessage(`Empresa filial ${holdingForm.razon_social} incorporada al grupo.`);
+    }
+    setModalHoldingOpen(false);
+  };
+
+  const handleDeleteHolding = (id: string, razon: string) => {
+    if (window.confirm(`¿Remover a ${razon} de la consolidación del grupo holding?`)) {
+      setEmpresasGrupo((prev) => prev.filter((e) => e.id !== id));
+      setToastMessage(`Empresa ${razon} removida.`);
+    }
+  };
 
   // --- TAB 2: USUARIOS Y PERMISOS RBAC ---
-  const usuariosRbac = [
-    { email: 'superadmin@kantio.online', nombre: 'Super Administrador Kantio', rol: 'SUPERADMIN PLATAFORMA', entidad: 'Kantio Core Global', permisos: 'Acceso Total Multi-inquilino', estado: 'ACTIVO' },
-    { email: 'admin.demo@kantio.online', nombre: 'Gerente General Demo', rol: 'ADMIN EMPRESA', entidad: 'Corporación Demo Kantio C.A.', permisos: 'Gobierno, Cierres, Revocación en 1 Clic', estado: 'ACTIVO' },
-    { email: 'contador.alpha@kantio.online', nombre: 'Lic. Carlos Méndez (Contador Senior)', rol: 'CONTADOR SENIOR', entidad: 'Despacho Alpha & Asoc.', permisos: 'Aprobación Asientos, Libros Fiscales SENIAT', estado: 'ACTIVO' },
-    { email: 'asistente.alpha@kantio.online', nombre: 'T.S.U. María Pérez (Asistente Carga)', rol: 'ASISTENTE CONTABLE', entidad: 'Despacho Alpha & Asoc.', permisos: 'Carga Facturas OCR, Borradores de Asientos', estado: 'ACTIVO' },
-    { email: 'auditor.externo@kantio.online', nombre: 'Dr. Fernando Ruiz (Auditor)', rol: 'AUDITOR FORENSE', entidad: 'Auditoría Externa', permisos: 'Solo Lectura, Trazabilidad, Pistas de Auditoría', estado: 'ACTIVO' },
-  ];
+  const [usuariosRbac, setUsuariosRbac] = useState<UsuarioRbacUI[]>([
+    { id: '1', email: 'superadmin@kantio.online', nombre: 'Super Administrador Kantio', rol: 'SUPERADMIN PLATAFORMA', entidad: 'Kantio Core Global', permisos: 'Acceso Total Multi-inquilino', estado: 'ACTIVO' },
+    { id: '2', email: 'admin.demo@kantio.online', nombre: 'Gerente General Demo', rol: 'ADMIN EMPRESA', entidad: 'Corporación Demo Kantio C.A.', permisos: 'Gobierno, Cierres, Revocación en 1 Clic', estado: 'ACTIVO' },
+    { id: '3', email: 'contador.alpha@kantio.online', nombre: 'Lic. Carlos Méndez (Contador Senior)', rol: 'CONTADOR SENIOR', entidad: 'Despacho Alpha & Asoc.', permisos: 'Aprobación Asientos, Libros Fiscales SENIAT', estado: 'ACTIVO' },
+    { id: '4', email: 'asistente.alpha@kantio.online', nombre: 'T.S.U. María Pérez (Asistente Carga)', rol: 'ASISTENTE CONTABLE', entidad: 'Despacho Alpha & Asoc.', permisos: 'Carga Facturas OCR, Borradores de Asientos', estado: 'ACTIVO' },
+    { id: '5', email: 'auditor.externo@kantio.online', nombre: 'Dr. Fernando Ruiz (Auditor)', rol: 'AUDITOR FORENSE', entidad: 'Auditoría Externa', permisos: 'Solo Lectura, Trazabilidad, Pistas de Auditoría', estado: 'ACTIVO' },
+  ]);
+
+  const [modalUsuarioOpen, setModalUsuarioOpen] = useState(false);
+  const [usuarioEditando, setUsuarioEditando] = useState<UsuarioRbacUI | null>(null);
+  const [usuarioForm, setUsuarioForm] = useState({
+    email: '',
+    nombre: '',
+    rol: 'ASISTENTE CONTABLE',
+    entidad: 'Corporación Demo Kantio C.A.',
+    permisos: 'Carga Facturas OCR, Borradores',
+    estado: 'ACTIVO'
+  });
+
+  const handleOpenUsuarioModal = (u?: UsuarioRbacUI) => {
+    if (u) {
+      setUsuarioEditando(u);
+      setUsuarioForm({ ...u });
+    } else {
+      setUsuarioEditando(null);
+      setUsuarioForm({
+        email: '',
+        nombre: '',
+        rol: 'ASISTENTE CONTABLE',
+        entidad: 'Corporación Demo Kantio C.A.',
+        permisos: 'Operación asistida y borrador',
+        estado: 'ACTIVO'
+      });
+    }
+    setModalUsuarioOpen(true);
+  };
+
+  const handleSaveUsuario = () => {
+    if (!usuarioForm.email || !usuarioForm.nombre) {
+      alert('Email y Nombre Completo son requeridos.');
+      return;
+    }
+    if (usuarioEditando) {
+      setUsuariosRbac((prev) =>
+        prev.map((u) => (u.id === usuarioEditando.id ? { ...u, ...usuarioForm } : u))
+      );
+      setToastMessage(`Usuario ${usuarioForm.email} actualizado.`);
+    } else {
+      setUsuariosRbac((prev) => [...prev, { ...usuarioForm, id: Date.now().toString() }]);
+      setToastMessage(`Usuario ${usuarioForm.email} registrado en el sistema RBAC.`);
+    }
+    setModalUsuarioOpen(false);
+  };
+
+  const handleDeleteUsuario = (id: string, email: string) => {
+    if (window.confirm(`¿Desea desactivar / eliminar al usuario ${email}?`)) {
+      setUsuariosRbac((prev) => prev.filter((u) => u.id !== id));
+      setToastMessage(`Usuario ${email} desactivado.`);
+    }
+  };
 
   return (
     <Box>
+      <Snackbar
+        open={!!toastMessage}
+        autoHideDuration={4000}
+        onClose={() => setToastMessage(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert severity="success" onClose={() => setToastMessage(null)}>
+          {toastMessage}
+        </Alert>
+      </Snackbar>
+
       <Box sx={{ mb: 2 }}>
         <Typography variant="h5" fontWeight="bold">
           5. Gobernanza, Despachos & Seguridad RBAC
@@ -238,22 +398,31 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
                       <Typography variant="body2" fontFamily="monospace">{d.fechaInicio}</Typography>
                     </Box>
 
-                    {d.estado === 'ACTIVA' ? (
-                      <Button
-                        variant="outlined"
-                        color="error"
-                        fullWidth
-                        startIcon={<BlockIcon />}
-                        onClick={() => handleRevocar(d.id)}
-                        sx={{ textTransform: 'none', fontWeight: 'bold' }}
-                      >
-                        Revocar Acceso Inmediatamente (1 Clic)
-                      </Button>
-                    ) : (
-                      <Alert severity="warning" sx={{ py: 0.5, px: 1.5, borderRadius: 1 }}>
-                        Acceso revocado por el Gerente General. El estudio no puede ver ni modificar registros.
-                      </Alert>
-                    )}
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      {d.estado === 'ACTIVA' ? (
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          fullWidth
+                          startIcon={<BlockIcon />}
+                          onClick={() => handleRevocar(d.id)}
+                          sx={{ textTransform: 'none', fontWeight: 'bold' }}
+                        >
+                          Revocar Acceso Inmediatamente (1 Clic)
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          fullWidth
+                          startIcon={<DeleteOutlineIcon />}
+                          onClick={() => handleEliminarDelegacion(d.id)}
+                          sx={{ textTransform: 'none', fontWeight: 'bold' }}
+                        >
+                          Eliminar Registro del Historial
+                        </Button>
+                      )}
+                    </Box>
                   </CardContent>
                 </Card>
               </Grid>
@@ -270,10 +439,19 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
               <TextField
                 fullWidth
                 size="small"
+                label="Nombre o Razón Social del Despacho"
+                value={nuevoNombre}
+                placeholder="ej: Despacho Auditor Ramos & Asoc."
+                onChange={(e) => setNuevoNombre(e.target.value)}
+                sx={{ mb: 2, mt: 1 }}
+              />
+              <TextField
+                fullWidth
+                size="small"
                 label="RIF del Despacho (ej: J-31456789-0)"
                 value={nuevoRif}
                 onChange={(e) => setNuevoRif(e.target.value)}
-                sx={{ mb: 2, mt: 1 }}
+                sx={{ mb: 2 }}
               />
               <TextField
                 fullWidth
@@ -281,7 +459,7 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
                 select
                 label="Nivel de Permisos Autorizados"
                 value={nuevoTipo}
-                onChange={(e) => setNuevoTipo(e.target.value)}
+                onChange={(e) => setNuevoTipo(e.target.value as any)}
               >
                 <MenuItem value="OPERATIVO_COMPLETO">OPERATIVO COMPLETO - Carga de Asientos, Facturas y Cierres</MenuItem>
                 <MenuItem value="AUDITORIA_LECTURA">SOLO LECTURA - Dictamen, Pistas de Auditoría y Balances</MenuItem>
@@ -303,7 +481,7 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
       {activeTab === 1 && (
         <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
           <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
               <Box>
                 <Typography variant="h6" fontWeight="bold">
                   Consolidación de Estados Financieros (Grupo Holding)
@@ -312,7 +490,16 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
                   Eliminación de saldos intercompañía y consolidación contable de empresas filiales bajo NIIF 10.
                 </Typography>
               </Box>
-              <Chip label="Holding Kantio Activo" color="primary" size="small" />
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  size="small"
+                  onClick={() => handleOpenHoldingModal()}
+                >
+                  Agregar Filial al Grupo
+                </Button>
+              </Box>
             </Box>
 
             <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e3e8ef', borderRadius: 2, mb: 3 }}>
@@ -326,11 +513,12 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
                     <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Ingresos Brutos</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Activos Totales</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Estado</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Acciones</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {empresasGrupo.map((e) => (
-                    <TableRow key={e.codigo} hover>
+                    <TableRow key={e.id} hover>
                       <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{e.codigo}</TableCell>
                       <TableCell><Typography variant="body2" fontWeight="600">{e.razon_social}</Typography></TableCell>
                       <TableCell sx={{ fontFamily: 'monospace' }}>{e.rif}</TableCell>
@@ -338,6 +526,18 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
                       <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>{e.ingresos_ves}</TableCell>
                       <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: 'primary.main', fontWeight: 'bold' }}>{e.activos_ves}</TableCell>
                       <TableCell sx={{ textAlign: 'center' }}><Chip label={e.estado} size="small" color="success" /></TableCell>
+                      <TableCell sx={{ textAlign: 'center' }}>
+                        <Tooltip title="Editar empresa filial">
+                          <IconButton size="small" color="primary" onClick={() => handleOpenHoldingModal(e)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Remover de holding">
+                          <IconButton size="small" color="error" onClick={() => handleDeleteHolding(e.id, e.razon_social)}>
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -372,7 +572,12 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
                   Segregación de funciones obligatoria conforme a mejores prácticas del Colegio de Contadores y Normas de Auditoría (NIA 240/315).
                 </Typography>
               </Box>
-              <Button variant="contained" startIcon={<KeyIcon />} size="small">
+              <Button
+                variant="contained"
+                startIcon={<KeyIcon />}
+                size="small"
+                onClick={() => handleOpenUsuarioModal()}
+              >
                 Nuevo Usuario / Asignar Rol
               </Button>
             </Box>
@@ -387,17 +592,30 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
                     <TableCell sx={{ fontWeight: 'bold' }}>Organización</TableCell>
                     <TableCell sx={{ fontWeight: 'bold' }}>Permisos Clave</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Estado</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Acciones</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {usuariosRbac.map((u) => (
-                    <TableRow key={u.email} hover>
+                    <TableRow key={u.id} hover>
                       <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{u.email}</TableCell>
                       <TableCell><Typography variant="body2" fontWeight="500">{u.nombre}</Typography></TableCell>
                       <TableCell><Chip label={u.rol} size="small" color={u.rol.includes('ADMIN') ? 'primary' : u.rol.includes('CONTADOR') ? 'success' : 'default'} /></TableCell>
                       <TableCell>{u.entidad}</TableCell>
                       <TableCell><Typography variant="caption" color="text.secondary">{u.permisos}</Typography></TableCell>
                       <TableCell sx={{ textAlign: 'center' }}><Chip label={u.estado} size="small" color="success" variant="outlined" /></TableCell>
+                      <TableCell sx={{ textAlign: 'center' }}>
+                        <Tooltip title="Editar rol / permisos">
+                          <IconButton size="small" color="primary" onClick={() => handleOpenUsuarioModal(u)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Desactivar usuario">
+                          <IconButton size="small" color="error" onClick={() => handleDeleteUsuario(u.id, u.email)}>
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -406,6 +624,141 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
           </CardContent>
         </Card>
       )}
+
+      {/* --- MODAL PARA EMPRESA EN HOLDING --- */}
+      <Dialog open={modalHoldingOpen} onClose={() => setModalHoldingOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>
+          {holdingEditando ? 'Modificar Empresa del Holding' : 'Vincular Filial a Grupo Holding'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Código"
+                value={holdingForm.codigo}
+                onChange={(e) => setHoldingForm({ ...holdingForm, codigo: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={8}>
+              <TextField
+                fullWidth
+                size="small"
+                label="RIF"
+                value={holdingForm.rif}
+                onChange={(e) => setHoldingForm({ ...holdingForm, rif: e.target.value.toUpperCase() })}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Razón Social"
+                value={holdingForm.razon_social}
+                onChange={(e) => setHoldingForm({ ...holdingForm, razon_social: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="% Participación Accionaria"
+                value={holdingForm.participacion}
+                onChange={(e) => setHoldingForm({ ...holdingForm, participacion: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Activos Aproximados"
+                value={holdingForm.activos_ves}
+                onChange={(e) => setHoldingForm({ ...holdingForm, activos_ves: e.target.value })}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setModalHoldingOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleSaveHolding}>Guardar Empresa</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* --- MODAL PARA USUARIO RBAC --- */}
+      <Dialog open={modalUsuarioOpen} onClose={() => setModalUsuarioOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>
+          {usuarioEditando ? 'Modificar Usuario y Privilegios' : 'Crear Usuario / Asignar Rol RBAC'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Correo Electrónico"
+                value={usuarioForm.email}
+                disabled={!!usuarioEditando}
+                onChange={(e) => setUsuarioForm({ ...usuarioForm, email: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Nombre Completo"
+                value={usuarioForm.nombre}
+                onChange={(e) => setUsuarioForm({ ...usuarioForm, nombre: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Rol Operativo</InputLabel>
+                <Select
+                  value={usuarioForm.rol}
+                  label="Rol Operativo"
+                  onChange={(e) => {
+                    const r = e.target.value;
+                    let p = 'Operación estándar';
+                    if (r === 'ADMIN EMPRESA') p = 'Gobierno, Cierres, Revocación en 1 Clic';
+                    else if (r === 'CONTADOR SENIOR') p = 'Aprobación Asientos, Libros Fiscales SENIAT';
+                    else if (r === 'ASISTENTE CONTABLE') p = 'Carga Facturas OCR, Borradores';
+                    else if (r === 'AUDITOR FORENSE') p = 'Solo Lectura, Trazabilidad, Pistas';
+                    setUsuarioForm({ ...usuarioForm, rol: r, permisos: p });
+                  }}
+                >
+                  <MenuItem value="ADMIN EMPRESA">ADMIN EMPRESA (Dueño / Gerente)</MenuItem>
+                  <MenuItem value="CONTADOR SENIOR">CONTADOR SENIOR (Firma Dictamen)</MenuItem>
+                  <MenuItem value="ASISTENTE CONTABLE">ASISTENTE CONTABLE (Captura)</MenuItem>
+                  <MenuItem value="AUDITOR FORENSE">AUDITOR FORENSE (Revisión Externa)</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Organización / Empresa"
+                value={usuarioForm.entidad}
+                onChange={(e) => setUsuarioForm({ ...usuarioForm, entidad: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Permisos Clave Asignados"
+                value={usuarioForm.permisos}
+                onChange={(e) => setUsuarioForm({ ...usuarioForm, permisos: e.target.value })}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setModalUsuarioOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleSaveUsuario}>Guardar Usuario</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

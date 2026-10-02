@@ -102,3 +102,38 @@ async def create_cuenta(
     await db.commit()
     await db.refresh(cuenta)
     return cuenta
+
+@router.put("/{cuenta_id}", response_model=CuentaContableOut)
+async def update_cuenta(
+    cuenta_id: UUID,
+    cuenta_in: CuentaContableUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    cuenta = await db.get(CuentaContable, cuenta_id)
+    if not cuenta:
+        raise HTTPException(status_code=404, detail="Cuenta contable no encontrada.")
+
+    update_data = cuenta_in.dict(exclude_unset=True)
+    for field, val in update_data.items():
+        setattr(cuenta, field, val)
+
+    await db.commit()
+    await db.refresh(cuenta)
+    return cuenta
+
+@router.delete("/{cuenta_id}", status_code=status.HTTP_200_OK)
+async def delete_cuenta(
+    cuenta_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    cuenta = await db.get(CuentaContable, cuenta_id)
+    if not cuenta:
+        raise HTTPException(status_code=404, detail="Cuenta contable no encontrada.")
+
+    # Soft-delete desactivando la cuenta
+    cuenta.activa = False
+    await db.commit()
+    return {"status": "success", "message": "Cuenta desactivada correctamente.", "id": str(cuenta_id)}
+

@@ -114,3 +114,28 @@ async def revocar_delegacion_estudio(
     await db.commit()
     await db.refresh(delegacion)
     return delegacion
+
+@router.get("/empresas/{empresa_id}/delegaciones", response_model=List[DelegacionOut])
+async def list_delegaciones_empresa(
+    empresa_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    stmt = select(EmpresaEstudioDelegacion).where(EmpresaEstudioDelegacion.empresa_id == empresa_id)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+@router.delete("/delegaciones/{delegacion_id}", status_code=status.HTTP_200_OK)
+async def delete_delegacion(
+    delegacion_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    delegacion = await db.get(EmpresaEstudioDelegacion, delegacion_id)
+    if not delegacion:
+        raise HTTPException(status_code=404, detail="Delegación no encontrada.")
+
+    await db.delete(delegacion)
+    await db.commit()
+    return {"status": "success", "message": "Delegación eliminada.", "id": str(delegacion_id)}
+

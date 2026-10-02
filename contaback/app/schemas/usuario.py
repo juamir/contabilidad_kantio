@@ -15,6 +15,15 @@ class UsuarioCreate(UsuarioBase):
     empresa_id: Optional[UUID] = None
     estudio_id: Optional[UUID] = None
 
+class UsuarioUpdate(BaseModel):
+    nombre_completo: Optional[str] = None
+    telefono: Optional[str] = None
+    rol: Optional[str] = None
+    tipo_usuario: Optional[str] = None
+    activo: Optional[bool] = None
+    password: Optional[str] = None
+
+
 class UsuarioOut(UsuarioBase):
     id: UUID
     empresa_id: Optional[UUID] = None

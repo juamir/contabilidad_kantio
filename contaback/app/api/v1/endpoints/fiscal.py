@@ -140,6 +140,73 @@ async def registrar_factura_fiscal(
     await db.refresh(factura)
     return factura
 
+@router.get("/empresas/{empresa_id}/facturas", response_model=List[FacturaFiscalOut])
+async def list_facturas_fiscales(
+    empresa_id: UUID,
+    tipo: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    stmt = select(FacturaFiscal).where(FacturaFiscal.empresa_id == empresa_id)
+    if tipo:
+        stmt = stmt.where(FacturaFiscal.tipo_operacion == tipo)
+    stmt = stmt.order_by(FacturaFiscal.fecha_emision.desc(), FacturaFiscal.created_at.desc())
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+@router.put("/facturas/{factura_id}", response_model=FacturaFiscalOut)
+async def update_factura_fiscal(
+    factura_id: UUID,
+    fact_in: FacturaFiscalCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    factura = await db.get(FacturaFiscal, factura_id)
+    if not factura:
+        raise HTTPException(status_code=404, detail="Factura fiscal no encontrada.")
+
+    monto_iva = round(fact_in.base_imponible * (fact_in.alicuota_iva / 100.0), 2)
+    monto_total = round(fact_in.base_imponible + monto_iva + fact_in.monto_exento, 2)
+    retenciones = calcular_retenciones(
+        base_imponible=fact_in.base_imponible,
+        monto_iva=monto_iva,
+        porcentaje_ret_iva=fact_in.porcentaje_retencion_iva,
+        porcentaje_ret_islr=fact_in.porcentaje_retencion_islr
+    )
+
+    factura.tipo_operacion = fact_in.tipo_operacion
+    factura.fecha_emision = fact_in.fecha_emision
+    factura.numero_factura = fact_in.numero_factura
+    factura.numero_control = fact_in.numero_control
+    factura.monto_exento = fact_in.monto_exento
+    factura.base_imponible = fact_in.base_imponible
+    factura.alicuota_iva = fact_in.alicuota_iva
+    factura.monto_iva = monto_iva
+    factura.monto_total = monto_total
+    factura.porcentaje_retencion_iva = fact_in.porcentaje_retencion_iva
+    factura.monto_retencion_iva = retenciones["monto_retencion_iva"]
+    factura.porcentaje_retencion_islr = fact_in.porcentaje_retencion_islr
+    factura.monto_retencion_islr = retenciones["monto_retencion_islr"]
+
+    await db.commit()
+    await db.refresh(factura)
+    return factura
+
+@router.delete("/facturas/{factura_id}", status_code=status.HTTP_200_OK)
+async def delete_factura_fiscal(
+    factura_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    factura = await db.get(FacturaFiscal, factura_id)
+    if not factura:
+        raise HTTPException(status_code=404, detail="Factura fiscal no encontrada.")
+
+    await db.delete(factura)
+    await db.commit()
+    return {"status": "success", "message": "Factura fiscal eliminada.", "id": str(factura_id)}
+
+
 @router.get("/empresas/{empresa_id}/retenciones-txt")
 async def descargar_txt_seniat(
     empresa_id: UUID,

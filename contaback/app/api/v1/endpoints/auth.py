@@ -85,3 +85,52 @@ async def register_admin(user_in: UsuarioCreate, db: AsyncSession = Depends(get_
     await db.commit()
     await db.refresh(user)
     return user
+
+@router.get("/usuarios", response_model=list[UsuarioOut])
+async def list_usuarios(
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(Usuario).order_by(Usuario.nombre_completo.asc())
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+@router.put("/usuarios/{usuario_id}", response_model=UsuarioOut)
+async def update_usuario(
+    usuario_id: str,
+    user_in: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    user = await db.get(Usuario, usuario_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    if "nombre_completo" in user_in and user_in["nombre_completo"]:
+        user.nombre_completo = user_in["nombre_completo"]
+    if "telefono" in user_in:
+        user.telefono = user_in["telefono"]
+    if "rol" in user_in and user_in["rol"]:
+        user.rol = user_in["rol"]
+    if "tipo_usuario" in user_in and user_in["tipo_usuario"]:
+        user.tipo_usuario = user_in["tipo_usuario"]
+    if "activo" in user_in:
+        user.activo = user_in["activo"]
+    if "password" in user_in and user_in["password"]:
+        user.hashed_password = get_password_hash(user_in["password"])
+
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+@router.delete("/usuarios/{usuario_id}")
+async def delete_usuario(
+    usuario_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    user = await db.get(Usuario, usuario_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    user.activo = False
+    await db.commit()
+    return {"status": "success", "message": "Usuario desactivado.", "id": usuario_id}
+

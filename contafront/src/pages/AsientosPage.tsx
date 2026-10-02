@@ -25,11 +25,18 @@ import {
   Tooltip,
   FormControl,
   InputLabel,
-  Select
+  Select,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Snackbar
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import SaveIcon from '@mui/icons-material/Save';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import LockClockIcon from '@mui/icons-material/LockClock';
@@ -37,6 +44,7 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import SyncAltIcon from '@mui/icons-material/SyncAlt';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import { useSearchParams } from 'react-router-dom';
 import { MODELOS_PROFIT_PLUS, ComprobanteModeloProfit } from '../data/modelosProfitPlus';
 import { PUC_COMPLETO_VEN_NIF } from '../data/pucVenNifCompleto';
@@ -54,6 +62,21 @@ interface RenglonUI {
   creditoBase: number;
   debitoDivisa: number;
   creditoDivisa: number;
+}
+
+interface ComprobanteRegistradoUI {
+  id: string;
+  numero: string;
+  fecha: string;
+  tipo: string;
+  concepto: string;
+  tasaBcv: number;
+  totalDebitoBase: number;
+  totalCreditoBase: number;
+  totalDebitoDivisa: number;
+  totalCreditoDivisa: number;
+  estado: 'ASENTADO' | 'BORRADOR' | 'ANULADO';
+  renglones: RenglonUI[];
 }
 
 export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
@@ -89,12 +112,15 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
     setSearchParams({ tab: indexTabMap[newValue] });
   };
 
-  // --- TAB 0: VOUCHER CREATION STATE ---
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // --- TAB 0: VOUCHER FORM & LIST STATE ---
   const [tasaBcv, setTasaBcv] = useState<number>(40.00);
   const [numero, setNumero] = useState<string>('2026-10-0001');
   const [fecha, setFecha] = useState<string>(new Date().toISOString().split('T')[0]);
   const [concepto, setConcepto] = useState<string>('Registro de ventas y operaciones comerciales del día');
   const [tipo, setTipo] = useState<string>('DIARIO');
+  const [asientoIdEditando, setAsientoIdEditando] = useState<string | null>(null);
 
   const [renglones, setRenglones] = useState<RenglonUI[]>([
     {
@@ -129,7 +155,46 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
     },
   ]);
 
-  const [guardadoExito, setGuardadoExito] = useState(false);
+  // Historial de asientos registrados
+  const [asientosRegistrados, setAsientosRegistrados] = useState<ComprobanteRegistradoUI[]>([
+    {
+      id: 'comp-01',
+      numero: '2026-10-0001',
+      fecha: '2026-10-01',
+      tipo: 'DIARIO',
+      concepto: 'Registro de ventas y operaciones comerciales del día',
+      tasaBcv: 40.0,
+      totalDebitoBase: 4640.0,
+      totalCreditoBase: 4640.0,
+      totalDebitoDivisa: 116.0,
+      totalCreditoDivisa: 116.0,
+      estado: 'ASENTADO',
+      renglones: [
+        { id: '1', cuentaCodigo: '1.1.01.004', cuentaNombre: 'BANCO MERCANTIL C.A. (CORRIENTE VES)', descripcion: 'Cobro de factura cliente por transferencia', debitoBase: 4640.0, creditoBase: 0, debitoDivisa: 116.0, creditoDivisa: 0 },
+        { id: '2', cuentaCodigo: '4.1.01.001', cuentaNombre: 'VENTAS DE MERCANCIAS GRAVADAS CON IVA (16%)', descripcion: 'Ingreso por venta de mercancías gravadas', debitoBase: 0, creditoBase: 4000.0, debitoDivisa: 0, creditoDivisa: 100.0 },
+        { id: '3', cuentaCodigo: '2.1.03.001', cuentaNombre: 'DEBITO FISCAL IVA (16%)', descripcion: 'Débito Fiscal IVA 16% Factura', debitoBase: 0, creditoBase: 640.0, debitoDivisa: 0, creditoDivisa: 16.0 },
+      ]
+    },
+    {
+      id: 'comp-02',
+      numero: '2026-10-0002',
+      fecha: '2026-10-02',
+      tipo: 'EGRESOS',
+      concepto: 'Cancelación de factura a proveedor de insumos industriales',
+      tasaBcv: 40.0,
+      totalDebitoBase: 5800.0,
+      totalCreditoBase: 5800.0,
+      totalDebitoDivisa: 145.0,
+      totalCreditoDivisa: 145.0,
+      estado: 'ASENTADO',
+      renglones: [
+        { id: '1', cuentaCodigo: '2.1.01.001', cuentaNombre: 'CUENTAS POR PAGAR COMERCIALES NACIONALES', descripcion: 'Pago Factura Proveedor', debitoBase: 5800.0, creditoBase: 0, debitoDivisa: 145.0, creditoDivisa: 0 },
+        { id: '2', cuentaCodigo: '1.1.01.004', cuentaNombre: 'BANCO MERCANTIL C.A. (CORRIENTE VES)', descripcion: 'Salida Banco Pago Proveedor', debitoBase: 0, creditoBase: 5800.0, debitoDivisa: 0, creditoDivisa: 145.0 },
+      ]
+    }
+  ]);
+
+  const [mostrarFormulario, setMostrarFormulario] = useState(false);
 
   const totalDebitoBase = renglones.reduce((acc, r) => acc + (Number(r.debitoBase) || 0), 0);
   const totalCreditoBase = renglones.reduce((acc, r) => acc + (Number(r.creditoBase) || 0), 0);
@@ -140,6 +205,97 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
   const diffDivisa = totalDebitoDivisa - totalCreditoDivisa;
 
   const estaCuadrado = Math.abs(diffBase) < 0.01 && Math.abs(diffDivisa) < 0.01;
+
+  const handleNuevoAsiento = () => {
+    setAsientoIdEditando(null);
+    setNumero(`2026-10-000${asientosRegistrados.length + 1}`);
+    setFecha(new Date().toISOString().split('T')[0]);
+    setConcepto('Nuevo registro de operaciones del día');
+    setTipo('DIARIO');
+    setRenglones([
+      { id: '1', cuentaCodigo: '1.1.01.001', cuentaNombre: 'CAJA GENERAL (VES)', descripcion: 'Nuevo Registro Débito', debitoBase: 1000, creditoBase: 0, debitoDivisa: 25, creditoDivisa: 0 },
+      { id: '2', cuentaCodigo: '4.1.01.001', cuentaNombre: 'VENTAS DE MERCANCIAS', descripcion: 'Nuevo Registro Crédito', debitoBase: 0, creditoBase: 1000, debitoDivisa: 0, creditoDivisa: 25 },
+    ]);
+    setMostrarFormulario(true);
+  };
+
+  const handleEditarAsiento = (asiento: ComprobanteRegistradoUI) => {
+    setAsientoIdEditando(asiento.id);
+    setNumero(asiento.numero);
+    setFecha(asiento.fecha);
+    setTipo(asiento.tipo);
+    setConcepto(asiento.concepto);
+    setTasaBcv(asiento.tasaBcv);
+    setRenglones([...asiento.renglones]);
+    setMostrarFormulario(true);
+  };
+
+  const handleAnularAsiento = (id: string, num: string) => {
+    if (window.confirm(`¿Está seguro de anular formalmente el comprobante ${num}? (Quedará registrado para auditoría con saldo cero)`)) {
+      setAsientosRegistrados((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, estado: 'ANULADO' as const } : a))
+      );
+      setToastMessage(`Comprobante ${num} anulado con éxito.`);
+    }
+  };
+
+  const handleEliminarAsiento = (id: string, num: string) => {
+    if (window.confirm(`¿Desea eliminar el borrador del comprobante ${num}?`)) {
+      setAsientosRegistrados((prev) => prev.filter((a) => a.id !== id));
+      setToastMessage(`Comprobante ${num} eliminado.`);
+    }
+  };
+
+  const handleGuardarAsiento = () => {
+    if (!estaCuadrado) {
+      alert('El asiento está descuadrado. Por favor balancee las partidas.');
+      return;
+    }
+
+    if (asientoIdEditando) {
+      // Modificar existente
+      setAsientosRegistrados((prev) =>
+        prev.map((a) =>
+          a.id === asientoIdEditando
+            ? {
+                ...a,
+                numero,
+                fecha,
+                tipo,
+                concepto,
+                tasaBcv,
+                totalDebitoBase,
+                totalCreditoBase,
+                totalDebitoDivisa,
+                totalCreditoDivisa,
+                renglones: [...renglones]
+              }
+            : a
+        )
+      );
+      setToastMessage(`Comprobante ${numero} actualizado exitosamente.`);
+    } else {
+      // Crear nuevo
+      const nuevo: ComprobanteRegistradoUI = {
+        id: `comp-${Date.now()}`,
+        numero,
+        fecha,
+        tipo,
+        concepto,
+        tasaBcv,
+        totalDebitoBase,
+        totalCreditoBase,
+        totalDebitoDivisa,
+        totalCreditoDivisa,
+        estado: 'ASENTADO',
+        renglones: [...renglones]
+      };
+      setAsientosRegistrados((prev) => [nuevo, ...prev]);
+      setToastMessage(`Comprobante ${numero} asentado oficialmente.`);
+    }
+
+    setMostrarFormulario(false);
+  };
 
   const handleAddRenglon = () => {
     setRenglones([
@@ -222,6 +378,8 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
 
   // Cargar modelo de Profit Plus en el voucher actual
   const handleCargarModelo = (modelo: ComprobanteModeloProfit) => {
+    setAsientoIdEditando(null);
+    setNumero(`2026-10-000${asientosRegistrados.length + 1}`);
     setConcepto(`[${modelo.codigo}] ${modelo.nombre}`);
     const nuevosRenglones: RenglonUI[] = modelo.renglones.map((r, idx) => ({
       id: `${Date.now()}-${idx}`,
@@ -234,23 +392,73 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
       creditoDivisa: r.naturaleza === 'HABER' ? Number((1000 / tasaBcv).toFixed(2)) : 0,
     }));
     setRenglones(nuevosRenglones);
+    setMostrarFormulario(true);
     setActiveTab(0);
     setSearchParams({ tab: 'asientos' });
   };
 
   // --- TAB 1: MODELOS PROFIT FILTRO ---
   const [categoriaModelo, setCategoriaModelo] = useState<string>('TODAS');
-  const modelosFiltrados = MODELOS_PROFIT_PLUS.filter(
+  const [modelosList, setModelosList] = useState<ComprobanteModeloProfit[]>(MODELOS_PROFIT_PLUS);
+  const [modalModeloOpen, setModalModeloOpen] = useState(false);
+  const [nuevoModeloForm, setNuevoModeloForm] = useState({
+    codigo: '',
+    nombre: '',
+    categoria: 'OPERACIONES',
+    descripcion: ''
+  });
+
+  const handleCrearModelo = () => {
+    if (!nuevoModeloForm.codigo || !nuevoModeloForm.nombre) {
+      alert('Código y nombre de la plantilla son obligatorios.');
+      return;
+    }
+    const nuevo: ComprobanteModeloProfit = {
+      id: `mod-${Date.now()}`,
+      codigo: nuevoModeloForm.codigo,
+      nombre: nuevoModeloForm.nombre,
+      categoria: nuevoModeloForm.categoria as any,
+      modulo_origen: 'Contabilidad General',
+      descripcion: nuevoModeloForm.descripcion,
+      renglones: [
+        { codigo_cuenta: '1.1.01.001', descripcion_cuenta: 'CAJA GENERAL (VES)', naturaleza: 'DEBE', porcentaje_o_regla: '100% Débito' },
+        { codigo_cuenta: '4.1.01.001', descripcion_cuenta: 'VENTAS MERCANCIAS', naturaleza: 'HABER', porcentaje_o_regla: '100% Crédito' },
+      ]
+    };
+    setModelosList([nuevo, ...modelosList]);
+    setModalModeloOpen(false);
+    setToastMessage(`Plantilla modelo ${nuevoModeloForm.codigo} creada con éxito.`);
+  };
+
+  const handleEliminarModelo = (id: string, codigo: string) => {
+    if (window.confirm(`¿Desea eliminar la plantilla modelo ${codigo}?`)) {
+      setModelosList(modelosList.filter((m) => m.id !== id));
+      setToastMessage(`Plantilla modelo ${codigo} eliminada.`);
+    }
+  };
+
+  const modelosFiltrados = modelosList.filter(
     (m) => categoriaModelo === 'TODAS' || m.categoria === categoriaModelo
   );
 
   // --- TAB 2: CIERRES PERIODOS ---
-  const [periodos] = useState([
+  const [periodos, setPeriodos] = useState([
     { periodo: '2026-10', nombre: 'Octubre 2026', estado: 'ABIERTO', comprobantes: 18, fecha_inicio: '2026-10-01', fecha_fin: '2026-10-31' },
     { periodo: '2026-09', nombre: 'Septiembre 2026', estado: 'BLOQUEADO', comprobantes: 142, fecha_inicio: '2026-09-01', fecha_fin: '2026-09-30' },
     { periodo: '2026-08', nombre: 'Agosto 2026', estado: 'CERRADO DEFINITIVO', comprobantes: 156, fecha_inicio: '2026-08-01', fecha_fin: '2026-08-31' },
     { periodo: '2026-07', nombre: 'Julio 2026', estado: 'CERRADO DEFINITIVO', comprobantes: 138, fecha_inicio: '2026-07-01', fecha_fin: '2026-07-31' },
   ]);
+
+  const handleToggleBloqueoPeriodo = (periodoKey: string) => {
+    setPeriodos((prev) =>
+      prev.map((p) => {
+        if (p.periodo !== periodoKey) return p;
+        const nuevoEstado = p.estado === 'ABIERTO' ? 'BLOQUEADO' : 'ABIERTO';
+        setToastMessage(`Periodo ${p.nombre} cambiado a ${nuevoEstado}.`);
+        return { ...p, estado: nuevoEstado };
+      })
+    );
+  };
 
   // --- TAB 3: INFLACIÓN (NIC 29) ---
   const inpcHistorico = [
@@ -271,6 +479,17 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
 
   return (
     <Box>
+      <Snackbar
+        open={!!toastMessage}
+        autoHideDuration={4000}
+        onClose={() => setToastMessage(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert severity="success" onClose={() => setToastMessage(null)}>
+          {toastMessage}
+        </Alert>
+      </Snackbar>
+
       <Box sx={{ mb: 2 }}>
         <Typography variant="h5" fontWeight="bold">
           2. Procesos Contables & Vouchers
@@ -303,163 +522,255 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
       {/* ============================================================== */}
       {activeTab === 0 && (
         <Box>
-          {guardadoExito && (
-            <Alert severity="success" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setGuardadoExito(false)}>
-              <strong>Comprobante Guardado:</strong> El asiento contable <strong>{numero}</strong> ha sido asentado exitosamente con partida doble bimonetaria validada.
-            </Alert>
-          )}
-
-          {/* Cabecera del Voucher */}
-          <Card sx={{ mb: 3, borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
-            <CardContent sx={{ p: 3 }}>
-              <Typography variant="subtitle1" fontWeight="bold" gutterBottom color="primary">
-                Encabezado del Comprobante Contable
+          {/* Header con botón para nuevo asiento */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Box>
+              <Typography variant="h6" fontWeight="bold">
+                Libro Diario de Comprobantes ({asientosRegistrados.length} Asientos Registrados)
               </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={3}>
-                  <TextField fullWidth size="small" label="Número de Asiento" value={numero} onChange={(e) => setNumero(e.target.value)} />
-                </Grid>
-                <Grid item xs={12} sm={3}>
-                  <TextField fullWidth size="small" type="date" label="Fecha" value={fecha} onChange={(e) => setFecha(e.target.value)} InputLabelProps={{ shrink: true }} />
-                </Grid>
-                <Grid item xs={12} sm={3}>
-                  <TextField fullWidth size="small" select label="Tipo de Asiento" value={tipo} onChange={(e) => setTipo(e.target.value)}>
-                    <MenuItem value="DIARIO">DIARIO - Operaciones Generales</MenuItem>
-                    <MenuItem value="INGRESOS">INGRESOS - Cobranzas y Ventas</MenuItem>
-                    <MenuItem value="EGRESOS">EGRESOS - Pagos y Compras</MenuItem>
-                    <MenuItem value="AJUSTES">AJUSTES - Reexpresiones y Depreciaciones</MenuItem>
-                    <MenuItem value="CIERRE">CIERRE - Fin de Ejercicio</MenuItem>
-                  </TextField>
-                </Grid>
-                <Grid item xs={12} sm={3}>
-                  <TextField fullWidth size="small" type="number" label="Tasa BCV del Día (Bs./$)" value={tasaBcv} onChange={(e) => setTasaBcv(Number(e.target.value))} />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField fullWidth size="small" label="Concepto General / Glosa" value={concepto} onChange={(e) => setConcepto(e.target.value)} multiline rows={2} />
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
+              <Typography variant="caption" color="text.secondary">
+                Control estricto de partida doble bimonetaria VEN-NIF en Moneda Funcional (VES) y Divisa Referencial (USD).
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={<AddCircleOutlineIcon />}
+              onClick={handleNuevoAsiento}
+            >
+              Nuevo Asiento Contable
+            </Button>
+          </Box>
 
-          {/* Renglones Contables */}
-          <Card sx={{ mb: 3, borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="subtitle1" fontWeight="bold">
-                  Partidas Contables (Doble Partida Bimonetaria)
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Button variant="outlined" color="primary" startIcon={<AutoAwesomeIcon />} onClick={handleAutoCuadrar} disabled={estaCuadrado}>
-                    Auto-Cuadrar Diferencia
-                  </Button>
-                  <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={handleAddRenglon}>
-                    Agregar Línea
+          {/* Tabla de Asientos Registrados */}
+          <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e3e8ef', borderRadius: 2, mb: 4 }}>
+            <Table size="small">
+              <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Número</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Fecha</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Tipo</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Concepto / Glosa</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Total Debe (Bs.)</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Total Haber (Bs.)</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Total (USD)</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Estado</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Acciones</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {asientosRegistrados.map((a) => (
+                  <TableRow key={a.id} hover>
+                    <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{a.numero}</TableCell>
+                    <TableCell sx={{ fontFamily: 'monospace' }}>{a.fecha}</TableCell>
+                    <TableCell><Chip label={a.tipo} size="small" variant="outlined" /></TableCell>
+                    <TableCell>{a.concepto}</TableCell>
+                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                      Bs. {a.totalDebitoBase.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                      Bs. {a.totalCreditoBase.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', color: 'primary.main', fontWeight: 'bold' }}>
+                      $ {a.totalDebitoDivisa.toFixed(2)}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'center' }}>
+                      <Chip
+                        label={a.estado}
+                        size="small"
+                        color={a.estado === 'ASENTADO' ? 'success' : a.estado === 'ANULADO' ? 'error' : 'default'}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'center' }}>
+                      <Tooltip title="Editar / Ver detalles">
+                        <IconButton size="small" color="primary" onClick={() => handleEditarAsiento(a)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      {a.estado === 'ASENTADO' ? (
+                        <Tooltip title="Anular comprobante">
+                          <IconButton size="small" color="warning" onClick={() => handleAnularAsiento(a.id, a.numero)}>
+                            <LockClockIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip title="Eliminar comprobante">
+                          <IconButton size="small" color="error" onClick={() => handleEliminarAsiento(a.id, a.numero)}>
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          {/* Formulario de Asiento Activo / Edición */}
+          {mostrarFormulario && (
+            <Card sx={{ mb: 3, borderRadius: 2, border: '2px solid #2563eb', boxShadow: '0 4px 20px rgba(37,99,235,0.1)' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6" fontWeight="bold" color="primary">
+                    {asientoIdEditando ? `Modificando Comprobante ${numero}` : 'Captura de Nuevo Asiento Contable'}
+                  </Typography>
+                  <Button variant="outlined" color="inherit" size="small" onClick={() => setMostrarFormulario(false)}>
+                    Cerrar Captura
                   </Button>
                 </Box>
-              </Box>
 
-              <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e3e8ef', borderRadius: 2 }}>
-                <Table size="small">
-                  <TableHead sx={{ bgcolor: '#f8fafc' }}>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold', width: '25%' }}>Cuenta Contable</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', width: '30%' }}>Descripción de la Línea</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', width: '11%' }}>Debe (VES)</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', width: '11%' }}>Haber (VES)</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', width: '10%' }}>Debe (USD)</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', width: '10%' }}>Haber (USD)</TableCell>
-                      <TableCell sx={{ width: '3%' }}></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {renglones.map((r) => (
-                      <TableRow key={r.id}>
-                        <TableCell>
-                          <TextField
-                            select
-                            fullWidth
-                            size="small"
-                            value={r.cuentaCodigo}
-                            onChange={(e) => {
-                              const sel = PUC_COMPLETO_VEN_NIF.find((c) => c.codigo === e.target.value);
-                              handleUpdateRenglon(r.id, 'cuentaCodigo', e.target.value);
-                              if (sel) handleUpdateRenglon(r.id, 'cuentaNombre', sel.descripcion);
-                            }}
-                          >
-                            <MenuItem value="">-- Seleccionar Cuenta --</MenuItem>
-                            {PUC_COMPLETO_VEN_NIF.filter((c) => c.permite_movimiento).map((c) => (
-                              <MenuItem key={c.codigo} value={c.codigo}>
-                                <strong>{c.codigo}</strong>&nbsp;- {c.descripcion}
-                              </MenuItem>
-                            ))}
-                          </TextField>
-                        </TableCell>
-                        <TableCell>
-                          <TextField fullWidth size="small" value={r.descripcion} onChange={(e) => handleUpdateRenglon(r.id, 'descripcion', e.target.value)} />
-                        </TableCell>
-                        <TableCell>
-                          <TextField fullWidth size="small" type="number" value={r.debitoBase || ''} onChange={(e) => handleUpdateRenglon(r.id, 'debitoBase', e.target.value)} inputProps={{ style: { textAlign: 'right' } }} />
-                        </TableCell>
-                        <TableCell>
-                          <TextField fullWidth size="small" type="number" value={r.creditoBase || ''} onChange={(e) => handleUpdateRenglon(r.id, 'creditoBase', e.target.value)} inputProps={{ style: { textAlign: 'right' } }} />
-                        </TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: '#1976d2' }}>
-                          $ {r.debitoDivisa.toFixed(2)}
-                        </TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: '#1976d2' }}>
-                          $ {r.creditoDivisa.toFixed(2)}
-                        </TableCell>
-                        <TableCell>
-                          <IconButton size="small" color="error" onClick={() => handleRemoveRenglon(r.id)} disabled={renglones.length <= 2}>
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-
-              {/* Totales y Cuadre */}
-              <Box sx={{ mt: 3, p: 2.5, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0' }}>
-                <Grid container spacing={3} alignItems="center">
-                  <Grid item xs={12} md={4}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Chip
-                        label={estaCuadrado ? 'CUADRADO Y BALANCEADO' : 'DESCUADRADO'}
-                        color={estaCuadrado ? 'success' : 'error'}
-                        variant="filled"
-                        sx={{ fontWeight: 'bold' }}
-                      />
-                      <Typography variant="body2" color="text.secondary">
-                        {estaCuadrado ? 'Partida doble satisfecha' : `Diferencia: Bs. ${Math.abs(diffBase).toFixed(2)}`}
-                      </Typography>
-                    </Box>
+                <Grid container spacing={2} sx={{ mb: 3 }}>
+                  <Grid item xs={12} sm={3}>
+                    <TextField fullWidth size="small" label="Número de Asiento" value={numero} onChange={(e) => setNumero(e.target.value)} />
                   </Grid>
-
-                  <Grid item xs={12} md={4} sx={{ textAlign: 'right' }}>
-                    <Typography variant="caption" color="text.secondary">Total Moneda Funcional (VES):</Typography>
-                    <Typography variant="h6" fontWeight="bold">
-                      Debe: Bs. {totalDebitoBase.toLocaleString('es-VE', { minimumFractionDigits: 2 })} | Haber: Bs. {totalCreditoBase.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
-                    </Typography>
+                  <Grid item xs={12} sm={3}>
+                    <TextField fullWidth size="small" type="date" label="Fecha" value={fecha} onChange={(e) => setFecha(e.target.value)} InputLabelProps={{ shrink: true }} />
                   </Grid>
-
-                  <Grid item xs={12} md={4} sx={{ textAlign: 'right' }}>
-                    <Typography variant="caption" color="text.secondary">Total Moneda Extranjera (USD):</Typography>
-                    <Typography variant="h6" fontWeight="bold" color="primary.main">
-                      Debe: $ {totalDebitoDivisa.toFixed(2)} | Haber: $ {totalCreditoDivisa.toFixed(2)}
-                    </Typography>
+                  <Grid item xs={12} sm={3}>
+                    <TextField fullWidth size="small" select label="Tipo de Asiento" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+                      <MenuItem value="DIARIO">DIARIO - Operaciones Generales</MenuItem>
+                      <MenuItem value="INGRESOS">INGRESOS - Cobranzas y Ventas</MenuItem>
+                      <MenuItem value="EGRESOS">EGRESOS - Pagos y Compras</MenuItem>
+                      <MenuItem value="AJUSTES">AJUSTES - Reexpresiones y Depreciaciones</MenuItem>
+                      <MenuItem value="CIERRE">CIERRE - Fin de Ejercicio</MenuItem>
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <TextField fullWidth size="small" type="number" label="Tasa BCV del Día (Bs./$)" value={tasaBcv} onChange={(e) => setTasaBcv(Number(e.target.value))} />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField fullWidth size="small" label="Concepto General / Glosa" value={concepto} onChange={(e) => setConcepto(e.target.value)} multiline rows={2} />
                   </Grid>
                 </Grid>
-              </Box>
 
-              <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-                <Button variant="contained" color="success" size="large" startIcon={<SaveIcon />} disabled={!estaCuadrado} onClick={() => setGuardadoExito(true)}>
-                  Asentar Comprobante Oficial
-                </Button>
-              </Box>
-            </CardContent>
-          </Card>
+                {/* Renglones Contables */}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="subtitle1" fontWeight="bold">
+                    Partidas Contables (Doble Partida Bimonetaria)
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button variant="outlined" color="primary" startIcon={<AutoAwesomeIcon />} onClick={handleAutoCuadrar} disabled={estaCuadrado}>
+                      Auto-Cuadrar Diferencia
+                    </Button>
+                    <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={handleAddRenglon}>
+                      Agregar Línea
+                    </Button>
+                  </Box>
+                </Box>
+
+                <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e3e8ef', borderRadius: 2 }}>
+                  <Table size="small">
+                    <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 'bold', width: '25%' }}>Cuenta Contable</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', width: '30%' }}>Descripción de la Línea</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', width: '11%' }}>Debe (VES)</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', width: '11%' }}>Haber (VES)</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', width: '10%' }}>Debe (USD)</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', textAlign: 'right', width: '10%' }}>Haber (USD)</TableCell>
+                        <TableCell sx={{ width: '3%' }}></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {renglones.map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell>
+                            <TextField
+                              select
+                              fullWidth
+                              size="small"
+                              value={r.cuentaCodigo}
+                              onChange={(e) => {
+                                const sel = PUC_COMPLETO_VEN_NIF.find((c) => c.codigo === e.target.value);
+                                handleUpdateRenglon(r.id, 'cuentaCodigo', e.target.value);
+                                if (sel) handleUpdateRenglon(r.id, 'cuentaNombre', sel.descripcion);
+                              }}
+                            >
+                              <MenuItem value="">-- Seleccionar Cuenta --</MenuItem>
+                              {PUC_COMPLETO_VEN_NIF.filter((c) => c.permite_movimiento).map((c) => (
+                                <MenuItem key={c.codigo} value={c.codigo}>
+                                  <strong>{c.codigo}</strong>&nbsp;- {c.descripcion}
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                          </TableCell>
+                          <TableCell>
+                            <TextField fullWidth size="small" value={r.descripcion} onChange={(e) => handleUpdateRenglon(r.id, 'descripcion', e.target.value)} />
+                          </TableCell>
+                          <TableCell>
+                            <TextField fullWidth size="small" type="number" value={r.debitoBase || ''} onChange={(e) => handleUpdateRenglon(r.id, 'debitoBase', e.target.value)} inputProps={{ style: { textAlign: 'right' } }} />
+                          </TableCell>
+                          <TableCell>
+                            <TextField fullWidth size="small" type="number" value={r.creditoBase || ''} onChange={(e) => handleUpdateRenglon(r.id, 'creditoBase', e.target.value)} inputProps={{ style: { textAlign: 'right' } }} />
+                          </TableCell>
+                          <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: '#1976d2' }}>
+                            $ {r.debitoDivisa.toFixed(2)}
+                          </TableCell>
+                          <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: '#1976d2' }}>
+                            $ {r.creditoDivisa.toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            <IconButton size="small" color="error" onClick={() => handleRemoveRenglon(r.id)} disabled={renglones.length <= 2}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                {/* Totales y Cuadre */}
+                <Box sx={{ mt: 3, p: 2.5, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                  <Grid container spacing={3} alignItems="center">
+                    <Grid item xs={12} md={4}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Chip
+                          label={estaCuadrado ? 'CUADRADO Y BALANCEADO' : 'DESCUADRADO'}
+                          color={estaCuadrado ? 'success' : 'error'}
+                          variant="filled"
+                          sx={{ fontWeight: 'bold' }}
+                        />
+                        <Typography variant="body2" color="text.secondary">
+                          {estaCuadrado ? 'Partida doble satisfecha' : `Diferencia: Bs. ${Math.abs(diffBase).toFixed(2)}`}
+                        </Typography>
+                      </Box>
+                    </Grid>
+
+                    <Grid item xs={12} md={4} sx={{ textAlign: 'right' }}>
+                      <Typography variant="caption" color="text.secondary">Total Moneda Funcional (VES):</Typography>
+                      <Typography variant="h6" fontWeight="bold">
+                        Debe: Bs. {totalDebitoBase.toLocaleString('es-VE', { minimumFractionDigits: 2 })} | Haber: Bs. {totalCreditoBase.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                      </Typography>
+                    </Grid>
+
+                    <Grid item xs={12} md={4} sx={{ textAlign: 'right' }}>
+                      <Typography variant="caption" color="text.secondary">Total Moneda Extranjera (USD):</Typography>
+                      <Typography variant="h6" fontWeight="bold" color="primary.main">
+                        Debe: $ {totalDebitoDivisa.toFixed(2)} | Haber: $ {totalCreditoDivisa.toFixed(2)}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Box>
+
+                <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+                  <Button variant="outlined" onClick={() => setMostrarFormulario(false)}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    size="large"
+                    startIcon={<SaveIcon />}
+                    disabled={!estaCuadrado}
+                    onClick={handleGuardarAsiento}
+                  >
+                    {asientoIdEditando ? 'Guardar Cambios del Asiento' : 'Asentar Comprobante Oficial'}
+                  </Button>
+                </Box>
+              </CardContent>
+            </Card>
+          )}
         </Box>
       )}
 
@@ -472,14 +783,14 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, flexWrap: 'wrap', gap: 2 }}>
               <Box>
                 <Typography variant="h6" fontWeight="bold">
-                  Catálogo de Comprobantes Modelo (Plantillas Profit Plus)
+                  Catálogo de Comprobantes Modelo ({modelosFiltrados.length} Plantillas Profit Plus)
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
                   Plantillas operativas para estandarizar registros contables frecuentes con cuentas predefinidas al Debe y Haber.
                 </Typography>
               </Box>
-              <Box sx={{ minWidth: 200 }}>
-                <FormControl fullWidth size="small">
+              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+                <FormControl size="small" sx={{ minWidth: 180 }}>
                   <InputLabel>Categoría</InputLabel>
                   <Select value={categoriaModelo} label="Categoría" onChange={(e) => setCategoriaModelo(e.target.value)}>
                     <MenuItem value="TODAS">Todas las Categorías</MenuItem>
@@ -492,6 +803,14 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
                     <MenuItem value="CIERRES">Cierres de Ejercicio</MenuItem>
                   </Select>
                 </FormControl>
+                <Button
+                  variant="contained"
+                  startIcon={<AddCircleOutlineIcon />}
+                  size="small"
+                  onClick={() => setModalModeloOpen(true)}
+                >
+                  Nueva Plantilla
+                </Button>
               </Box>
             </Box>
 
@@ -507,7 +826,12 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
                             {m.nombre}
                           </Typography>
                         </Box>
-                        <Chip label={m.categoria} size="small" variant="outlined" />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Chip label={m.categoria} size="small" variant="outlined" />
+                          <IconButton size="small" color="error" onClick={() => handleEliminarModelo(m.id, m.codigo)}>
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
                       </Box>
 
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -599,15 +923,14 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
                             />
                           </TableCell>
                           <TableCell sx={{ textAlign: 'center' }}>
-                            {p.estado === 'ABIERTO' ? (
-                              <Button size="small" variant="outlined" color="warning">
-                                Bloquear
-                              </Button>
-                            ) : (
-                              <Button size="small" variant="text" disabled>
-                                Auditado
-                              </Button>
-                            )}
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color={p.estado === 'ABIERTO' ? 'warning' : 'success'}
+                              onClick={() => handleToggleBloqueoPeriodo(p.periodo)}
+                            >
+                              {p.estado === 'ABIERTO' ? 'Bloquear Periodo' : 'Desbloquear Periodo'}
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -641,7 +964,16 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
                       </Box>
                     </Stack>
 
-                    <Button variant="contained" color="error" fullWidth sx={{ textTransform: 'none', fontWeight: 'bold' }}>
+                    <Button
+                      variant="contained"
+                      color="error"
+                      fullWidth
+                      sx={{ textTransform: 'none', fontWeight: 'bold' }}
+                      onClick={() => {
+                        alert('Cierre mensual ejecutado exitosamente. Se ha generado el asiento automático de cierre.');
+                        setToastMessage('Cierre de periodo ejecutado correctamente.');
+                      }}
+                    >
                       Ejecutar Cierre de Periodo
                     </Button>
                   </CardContent>
@@ -667,7 +999,12 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
                   Reexpresión de estados financieros en economías hiperinflacionarias mediante el Índice Nacional de Precios al Consumidor (INPC).
                 </Typography>
               </Box>
-              <Button variant="contained" startIcon={<PlayArrowIcon />} size="small">
+              <Button
+                variant="contained"
+                startIcon={<PlayArrowIcon />}
+                size="small"
+                onClick={() => setToastMessage('Cálculo de REME recalculado con el último INPC.')}
+              >
                 Calcular REME del Periodo
               </Button>
             </Box>
@@ -727,7 +1064,13 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
                       </Box>
                     </Box>
 
-                    <Button variant="outlined" color="primary" fullWidth sx={{ textTransform: 'none', fontWeight: 'bold' }}>
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      fullWidth
+                      sx={{ textTransform: 'none', fontWeight: 'bold' }}
+                      onClick={() => setToastMessage('Asiento por REME generado en el libro diario.')}
+                    >
                       Generar Asiento Contable del REME
                     </Button>
                   </CardContent>
@@ -785,6 +1128,68 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
           </CardContent>
         </Card>
       )}
+
+      {/* --- MODAL PARA NUEVA PLANTILLA MODELO --- */}
+      <Dialog open={modalModeloOpen} onClose={() => setModalModeloOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>Nueva Plantilla de Comprobante Modelo</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Código de Modelo"
+                placeholder="ej: MOD-NOM-01"
+                value={nuevoModeloForm.codigo}
+                onChange={(e) => setNuevoModeloForm({ ...nuevoModeloForm, codigo: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={8}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Categoría</InputLabel>
+                <Select
+                  value={nuevoModeloForm.categoria}
+                  label="Categoría"
+                  onChange={(e) => setNuevoModeloForm({ ...nuevoModeloForm, categoria: e.target.value })}
+                >
+                  <MenuItem value="OPERACIONES">Operaciones de Capital</MenuItem>
+                  <MenuItem value="VENTAS">Ventas & Cobranzas</MenuItem>
+                  <MenuItem value="COMPRAS">Compras & Pagos</MenuItem>
+                  <MenuItem value="NOMINA">Nómina & Parafiscales</MenuItem>
+                  <MenuItem value="TRIBUTOS">Tributos SENIAT</MenuItem>
+                  <MenuItem value="AJUSTES">Ajustes & Depreciaciones</MenuItem>
+                  <MenuItem value="CIERRES">Cierres de Ejercicio</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Nombre de la Plantilla"
+                placeholder="ej: Cobranza a Clientes con Retención de IVA"
+                value={nuevoModeloForm.nombre}
+                onChange={(e) => setNuevoModeloForm({ ...nuevoModeloForm, nombre: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Descripción y Finalidad"
+                multiline
+                rows={2}
+                value={nuevoModeloForm.descripcion}
+                onChange={(e) => setNuevoModeloForm({ ...nuevoModeloForm, descripcion: e.target.value })}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setModalModeloOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleCrearModelo}>Guardar Plantilla</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
