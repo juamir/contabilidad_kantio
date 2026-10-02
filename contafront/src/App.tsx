@@ -10,6 +10,7 @@ import { EstudiosPage } from './pages/EstudiosPage';
 import { AsientosPage } from './pages/AsientosPage';
 import { FiscalPage } from './pages/FiscalPage';
 import { ReportesPage } from './pages/ReportesPage';
+import { EmpresasPage } from './pages/EmpresasPage';
 
 import { LoginPage } from './pages/LoginPage';
 import { useAuthStore } from './store/useAuthStore';
@@ -52,6 +53,7 @@ const ProtectedRoutes: React.FC = () => {
         <Route path="/balance-comprobacion" element={<ReportesPage initialTab="comprobacion" />} />
 
         {/* Modulo 5: Gobernanza & Despachos */}
+        <Route path="/empresas" element={<EmpresasPage />} />
         <Route path="/estudios" element={<EstudiosPage />} />
         <Route path="/consolidacion" element={<EstudiosPage initialTab="holding" />} />
         <Route path="/usuarios" element={<EstudiosPage initialTab="usuarios" />} />

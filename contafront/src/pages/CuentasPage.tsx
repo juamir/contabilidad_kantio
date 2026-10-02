@@ -46,8 +46,11 @@ import GroupIcon from '@mui/icons-material/Group';
 import DownloadIcon from '@mui/icons-material/Download';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import HistoryIcon from '@mui/icons-material/History';
 import { useSearchParams } from 'react-router-dom';
 import { PUC_COMPLETO_VEN_NIF, CuentaPUC } from '../data/pucVenNifCompleto';
+import { formatearCodigoContable, inferirClaseContable } from '../utils/cuentaFormatter';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/useAuthStore';
 
@@ -101,6 +104,22 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
   // Modal Cuenta
   const [modalCuentaOpen, setModalCuentaOpen] = useState(false);
   const [cuentaEditando, setCuentaEditando] = useState<CuentaPUC | null>(null);
+
+  // Modal Movimientos (Profit 003)
+  const [modalMovimientosOpen, setModalMovimientosOpen] = useState(false);
+  const [cuentaMovimientosSeleccionada, setCuentaMovimientosSeleccionada] = useState<CuentaPUC | null>(null);
+  const [movimientosData, setMovimientosData] = useState<Array<{ fecha: string; comprobante: string; concepto: string; debe: number; haber: number }>>([]);
+
+  const handleVerMovimientos = (cuenta: CuentaPUC) => {
+    setCuentaMovimientosSeleccionada(cuenta);
+    // Simular o cargar movimientos
+    setMovimientosData([
+      { fecha: '2026-01-01', comprobante: 'AS-APE-001', concepto: 'Asiento de Apertura de Ejercicio Económico', debe: cuenta.naturaleza === 'DEUDORA' ? 50000 : 0, haber: cuenta.naturaleza === 'ACREEDORA' ? 50000 : 0 },
+      { fecha: '2026-01-15', comprobante: 'AS-OPE-004', concepto: 'Operaciones Comerciales del Periodo', debe: 12500, haber: 4200 },
+      { fecha: '2026-02-01', comprobante: 'AS-OPE-012', concepto: 'Liquidación de Retenciones y Pagos', debe: 3500, haber: 8900 },
+    ]);
+    setModalMovimientosOpen(true);
+  };
   const [cuentaForm, setCuentaForm] = useState<{
     codigo: string;
     descripcion: string;
@@ -148,6 +167,35 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
       });
     }
     setModalCuentaOpen(true);
+  };
+
+  const handleCodigoChange = (raw: string) => {
+    // Al escribir, inferir automáticamente clase y naturaleza
+    const inferred = inferirClaseContable(raw);
+    const nivelCalculado = raw.includes('.') ? Math.min(raw.split('.').filter(Boolean).length, 6) : 1;
+    setCuentaForm((prev) => ({
+      ...prev,
+      codigo: raw,
+      tipo_cuenta: inferred.tipo_cuenta,
+      naturaleza: inferred.naturaleza,
+      nivel: nivelCalculado || 4,
+    }));
+  };
+
+  const handleBlurCodigo = () => {
+    // Al salir del campo, autocompletar con máscara expandiendo ceros (ej: 1.1.1.6 -> 1.1.01.006)
+    if (cuentaForm.codigo) {
+      const formatted = formatearCodigoContable(cuentaForm.codigo);
+      const inferred = inferirClaseContable(formatted);
+      const nivelCalculado = formatted.includes('.') ? Math.min(formatted.split('.').filter(Boolean).length, 6) : 1;
+      setCuentaForm((prev) => ({
+        ...prev,
+        codigo: formatted,
+        tipo_cuenta: inferred.tipo_cuenta,
+        naturaleza: inferred.naturaleza,
+        nivel: nivelCalculado || 4,
+      }));
+    }
   };
 
   const handleSaveCuenta = async () => {
@@ -615,6 +663,11 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
                           </Box>
                         </TableCell>
                         <TableCell sx={{ textAlign: 'center' }}>
+                          <Tooltip title="Ver movimientos históricos (Profit 003)">
+                            <IconButton size="small" color="info" onClick={() => handleVerMovimientos(c)}>
+                              <HistoryIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
                           <Tooltip title="Modificar cuenta">
                             <IconButton size="small" color="primary" onClick={() => handleOpenCuentaModal(c)}>
                               <EditIcon fontSize="small" />
@@ -1000,8 +1053,21 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
                 label="Código Contable"
                 value={cuentaForm.codigo}
                 disabled={!!cuentaEditando}
-                placeholder="ej: 1.1.01.006"
-                onChange={(e) => setCuentaForm({ ...cuentaForm, codigo: e.target.value })}
+                placeholder="ej: 1.1.1.6 (se expande a 1.1.01.006)"
+                helperText="Formato automático con ceros a la izquierda (Profit 002)"
+                onChange={(e) => handleCodigoChange(e.target.value)}
+                onBlur={handleBlurCodigo}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title="Expandir con máscara configurada">
+                        <IconButton size="small" onClick={handleBlurCodigo}>
+                          <AutoFixHighIcon fontSize="small" color="primary" />
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  )
+                }}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -1029,12 +1095,30 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
                 onChange={(e) => setCuentaForm({ ...cuentaForm, descripcion: e.target.value })}
               />
             </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ p: 1.5, bgcolor: '#e3f2fd', borderRadius: 1.5, border: '1px solid #90caf9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    Clasificación Financiera Invertida/Inferida Automáticamente:
+                  </Typography>
+                  <Typography variant="body2" fontWeight="bold" color="primary.dark">
+                    {inferirClaseContable(cuentaForm.codigo).nombre_clase}
+                  </Typography>
+                </Box>
+                <Chip
+                  label={cuentaForm.naturaleza}
+                  color={cuentaForm.naturaleza === 'DEUDORA' ? 'primary' : 'secondary'}
+                  size="small"
+                  variant="filled"
+                />
+              </Box>
+            </Grid>
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth size="small">
-                <InputLabel>Naturaleza</InputLabel>
+                <InputLabel>Naturaleza (Ajuste Opcional)</InputLabel>
                 <Select
                   value={cuentaForm.naturaleza}
-                  label="Naturaleza"
+                  label="Naturaleza (Ajuste Opcional)"
                   onChange={(e) => setCuentaForm({ ...cuentaForm, naturaleza: e.target.value as any })}
                 >
                   <MenuItem value="DEUDORA">DEUDORA (Aumenta por Debe)</MenuItem>
@@ -1044,10 +1128,10 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
             </Grid>
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth size="small">
-                <InputLabel>Clase Financiera</InputLabel>
+                <InputLabel>Clase Financiera (Ajuste Opcional)</InputLabel>
                 <Select
                   value={cuentaForm.tipo_cuenta}
-                  label="Clase Financiera"
+                  label="Clase Financiera (Ajuste Opcional)"
                   onChange={(e) => setCuentaForm({ ...cuentaForm, tipo_cuenta: e.target.value as any })}
                 >
                   <MenuItem value="ACTIVO">1. Activo</MenuItem>
@@ -1327,6 +1411,83 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
         <DialogActions sx={{ p: 2 }}>
           <Button onClick={() => setModalAuxOpen(false)}>Cancelar</Button>
           <Button variant="contained" onClick={handleSaveAux}>Guardar Auxiliar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* --- MODAL MOVIMIENTOS HISTÓRICOS (PROFIT 003) --- */}
+      <Dialog open={modalMovimientosOpen} onClose={() => setModalMovimientosOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box>
+            <Typography variant="h6" fontWeight="bold">
+              Movimientos de la Cuenta: {cuentaMovimientosSeleccionada?.codigo}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {cuentaMovimientosSeleccionada?.descripcion} | Naturaleza: {cuentaMovimientosSeleccionada?.naturaleza}
+            </Typography>
+          </Box>
+          <Chip label="Mayor Analítico Integrado" color="primary" size="small" />
+        </DialogTitle>
+        <DialogContent dividers>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, mb: 2 }}>
+            <Paper sx={{ p: 1.5, bgcolor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+              <Typography variant="caption" color="text.secondary">Total Débitos (Debe):</Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="primary.main">
+                Bs. {movimientosData.reduce((acc, m) => acc + m.debe, 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+              </Typography>
+            </Paper>
+            <Paper sx={{ p: 1.5, bgcolor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+              <Typography variant="caption" color="text.secondary">Total Créditos (Haber):</Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="secondary.main">
+                Bs. {movimientosData.reduce((acc, m) => acc + m.haber, 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+              </Typography>
+            </Paper>
+            <Paper sx={{ p: 1.5, bgcolor: '#f1f8e9', border: '1px solid #c8e6c9' }}>
+              <Typography variant="caption" color="text.secondary">Saldo Actual en Libros:</Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="success.main">
+                Bs. {((movimientosData.reduce((acc, m) => acc + m.debe, 0) - movimientosData.reduce((acc, m) => acc + m.haber, 0)) * (cuentaMovimientosSeleccionada?.naturaleza === 'ACREEDORA' ? -1 : 1)).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+              </Typography>
+            </Paper>
+          </Box>
+
+          <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5 }}>
+            <Table size="small">
+              <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Fecha</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Comprobante</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Concepto / Glosa</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Debe (VES)</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Haber (VES)</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {movimientosData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} sx={{ textAlign: 'center', py: 3, color: 'text.secondary' }}>
+                      No se registran movimientos en el ejercicio actual para esta cuenta.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  movimientosData.map((m, idx) => (
+                    <TableRow key={idx} hover>
+                      <TableCell sx={{ fontFamily: 'monospace' }}>{m.fecha}</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: 'primary.main' }}>#{m.comprobante}</TableCell>
+                      <TableCell>{m.concepto}</TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: m.debe > 0 ? 'bold' : 'normal' }}>
+                        {m.debe > 0 ? `Bs. ${m.debe.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : '-'}
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: m.haber > 0 ? 'bold' : 'normal' }}>
+                        {m.haber > 0 ? `Bs. ${m.haber.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button variant="contained" onClick={() => setModalMovimientosOpen(false)}>Cerrar Ficha</Button>
         </DialogActions>
       </Dialog>
     </Box>

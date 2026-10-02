@@ -151,10 +151,12 @@ const MENU_GROUPS: NavPrimaryGroup[] = [
     icon: <BusinessIcon />,
     subsections: [
       {
-        subtitle: 'Outsourcing & Seguridad',
+        subtitle: 'Empresas & Outsourcing',
         key: 'outsourcing',
         items: [
-          { text: 'Estudios Contables (Portabilidad)', icon: <BusinessIcon />, path: '/estudios' },
+          { text: 'Empresas Titulares (SaaS)', icon: <CorporateFareIcon />, path: '/empresas' },
+          { text: 'Parámetros de Empresa', icon: <BusinessIcon />, path: '/empresas?tab=parametros' },
+          { text: 'Estudios Contables (Hub)', icon: <DomainIcon />, path: '/estudios' },
           { text: 'Consolidación de Grupos', icon: <CorporateFareIcon />, path: '/estudios?tab=holding' },
           { text: 'Usuarios & Permisos (RBAC)', icon: <AdminPanelSettingsIcon />, path: '/estudios?tab=usuarios' },
         ]

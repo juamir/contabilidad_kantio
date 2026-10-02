@@ -296,3 +296,60 @@ async def delete_comprobante(
     await db.commit()
     return {"status": "success", "message": "Comprobante eliminado con éxito.", "id": str(comprobante_id)}
 
+@router.post("/empresas/{empresa_id}/procesar-lote")
+async def procesar_lote_comprobantes(
+    empresa_id: UUID,
+    operacion: str = Query(..., pattern="^(PROCESAR|REVERSAR)$"),
+    desde: date = Query(...),
+    hasta: date = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """
+    Procesar comprobantes en lote (Profit Plus Contabilidad 013).
+    - PROCESAR: Pasa comprobantes BORRADOR/REVISADO a ASENTADO verificando cuadre.
+    - REVERSAR: Pasa comprobantes ASENTADO a BORRADOR para permitir correcciones (si el periodo no está cerrado).
+    """
+    if current_user.rol in ["AUDITOR_EXTERNO", "ASISTENTE_CONTABLE"]:
+        raise HTTPException(status_code=403, detail="No tiene permisos para procesar o reversar comprobantes en lote.")
+
+    stmt = (
+        select(Comprobante)
+        .options(selectinload(Comprobante.renglones))
+        .where(
+            Comprobante.empresa_id == empresa_id,
+            Comprobante.fecha >= desde,
+            Comprobante.fecha <= hasta
+        )
+    )
+    result = await db.execute(stmt)
+    comprobantes = result.scalars().all()
+
+    procesados = 0
+    errores = []
+
+    for comp in comprobantes:
+        if operacion == "PROCESAR" and comp.estado in ["BORRADOR", "REVISADO"]:
+            dif_base = round(abs(comp.total_debito_base - comp.total_credito_base), 2)
+            dif_divisa = round(abs(comp.total_debito_divisa - comp.total_credito_divisa), 2)
+            if dif_base > 0.01 or dif_divisa > 0.01:
+                errores.append(f"Comprobante #{comp.numero} descuadrado (dif: {dif_base})")
+                continue
+            comp.estado = "ASENTADO"
+            comp.asentado_at = datetime.utcnow()
+            procesados += 1
+        elif operacion == "REVERSAR" and comp.estado == "ASENTADO":
+            comp.estado = "BORRADOR"
+            comp.asentado_at = None
+            procesados += 1
+
+    await db.commit()
+    return {
+        "status": "success",
+        "operacion": operacion,
+        "total_encontrados": len(comprobantes),
+        "total_procesados": procesados,
+        "errores": errores
+    }
+
+

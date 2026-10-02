@@ -21,3 +21,4 @@ class Usuario(Base):
 
     empresa = relationship("Empresa", foreign_keys=[empresa_id])
     estudio = relationship("EstudioContable", back_populates="usuarios", foreign_keys=[estudio_id])
+    empresas_permitidas = relationship("UsuarioEmpresaAcceso", back_populates="usuario", cascade="all, delete-orphan")
