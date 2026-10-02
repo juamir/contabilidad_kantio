@@ -63,7 +63,7 @@ interface NavPrimaryGroup {
   subsections: NavSubSection[];
 }
 
-// Organización lógica combinando el rigor de Profit Plus y la UX moderna de Kantio Nómina
+// Organización lógica de navegación con UX moderna y jerárquica para Kantio Contabilidad
 const MENU_GROUPS: NavPrimaryGroup[] = [
   {
     title: '1. Tablas & Maestros',

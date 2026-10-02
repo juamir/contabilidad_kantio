@@ -1,6 +1,6 @@
 /**
  * Utilidad para formatear y autocompletar códigos contables según la máscara configurada.
- * Inspirado en la parametrización de niveles de Profit Plus Contabilidad (002).
+ * Parametrización configurable de niveles y máscaras contables.
  */
 
 export interface MascaraContableConfig {
@@ -62,7 +62,7 @@ export function formatearCodigoContable(
 
 /**
  * Infiere automáticamente el tipo de cuenta y la naturaleza contable
- * a partir del primer dígito del código (Normativa VEN-NIF / Profit Plus).
+ * a partir del primer dígito del código (Normativa VEN-NIF).
  */
 export function inferirClaseContable(codigo: string): {
   tipo_cuenta: 'ACTIVO' | 'PASIVO' | 'PATRIMONIO' | 'INGRESO' | 'COSTO' | 'GASTO' | 'ORDEN';

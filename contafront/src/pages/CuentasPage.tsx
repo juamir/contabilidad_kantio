@@ -105,7 +105,7 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
   const [modalCuentaOpen, setModalCuentaOpen] = useState(false);
   const [cuentaEditando, setCuentaEditando] = useState<CuentaPUC | null>(null);
 
-  // Modal Movimientos (Profit 003)
+  // Modal Movimientos Históricos
   const [modalMovimientosOpen, setModalMovimientosOpen] = useState(false);
   const [cuentaMovimientosSeleccionada, setCuentaMovimientosSeleccionada] = useState<CuentaPUC | null>(null);
   const [movimientosData, setMovimientosData] = useState<Array<{ fecha: string; comprobante: string; concepto: string; debe: number; haber: number }>>([]);
@@ -663,7 +663,7 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
                           </Box>
                         </TableCell>
                         <TableCell sx={{ textAlign: 'center' }}>
-                          <Tooltip title="Ver movimientos históricos (Profit 003)">
+                          <Tooltip title="Ver movimientos históricos">
                             <IconButton size="small" color="info" onClick={() => handleVerMovimientos(c)}>
                               <HistoryIcon fontSize="small" />
                             </IconButton>
@@ -1054,7 +1054,7 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
                 value={cuentaForm.codigo}
                 disabled={!!cuentaEditando}
                 placeholder="ej: 1.1.1.6 (se expande a 1.1.01.006)"
-                helperText="Formato automático con ceros a la izquierda (Profit 002)"
+                helperText="Formato automático con ceros a la izquierda según niveles configurados"
                 onChange={(e) => handleCodigoChange(e.target.value)}
                 onBlur={handleBlurCodigo}
                 InputProps={{
@@ -1414,7 +1414,7 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
         </DialogActions>
       </Dialog>
 
-      {/* --- MODAL MOVIMIENTOS HISTÓRICOS (PROFIT 003) --- */}
+      {/* --- MODAL MOVIMIENTOS HISTÓRICOS --- */}
       <Dialog open={modalMovimientosOpen} onClose={() => setModalMovimientosOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Box>

@@ -6,7 +6,7 @@ export interface RenglonModelo {
   requiere_auxiliar?: boolean;
 }
 
-export interface ComprobanteModeloProfit {
+export interface ComprobanteModelo {
   id: string;
   codigo: string;
   nombre: string;
@@ -16,7 +16,7 @@ export interface ComprobanteModeloProfit {
   renglones: RenglonModelo[];
 }
 
-export const MODELOS_PROFIT_PLUS: ComprobanteModeloProfit[] = [
+export const MODELOS_CONTABLES_ESTANDAR: ComprobanteModelo[] = [
   {
     id: 'MOD-001',
     codigo: 'AS-APE-01',
@@ -35,7 +35,7 @@ export const MODELOS_PROFIT_PLUS: ComprobanteModeloProfit[] = [
     nombre: 'Ventas de Mercancías a Crédito con Débito Fiscal IVA',
     categoria: 'VENTAS',
     descripcion: 'Emisión de Factura Fiscal a crédito generando cuenta por cobrar comercial y Débito Fiscal IVA (16%).',
-    modulo_origen: 'Facturación / Ventas Profit',
+    modulo_origen: 'Facturación / Cuentas por Cobrar',
     renglones: [
       { codigo_cuenta: '1.1.03.001', descripcion_cuenta: 'CUENTAS POR COBRAR CLIENTES NACIONALES', naturaleza: 'DEBE', porcentaje_o_regla: '116% Total Factura', requiere_auxiliar: true },
       { codigo_cuenta: '4.1.01.001', descripcion_cuenta: 'VENTAS DE MERCANCIAS GRAVADAS CON IVA (16%)', naturaleza: 'HABER', porcentaje_o_regla: '100% Base Imponible' },
@@ -48,7 +48,7 @@ export const MODELOS_PROFIT_PLUS: ComprobanteModeloProfit[] = [
     nombre: 'Ventas de Contado con Depósito Bancario e IVA',
     categoria: 'VENTAS',
     descripcion: 'Venta con cobro inmediato mediante transferencia o punto de venta bancario.',
-    modulo_origen: 'Punto de Venta / Caja Profit',
+    modulo_origen: 'Punto de Venta / Caja POS',
     renglones: [
       { codigo_cuenta: '1.1.01.005', descripcion_cuenta: 'BANCO DE VENEZUELA S.A. (CORRIENTE VES)', naturaleza: 'DEBE', porcentaje_o_regla: '116% Monto Recibido' },
       { codigo_cuenta: '4.1.01.001', descripcion_cuenta: 'VENTAS DE MERCANCIAS GRAVADAS CON IVA (16%)', naturaleza: 'HABER', porcentaje_o_regla: '100% Base Imponible' },
@@ -61,7 +61,7 @@ export const MODELOS_PROFIT_PLUS: ComprobanteModeloProfit[] = [
     nombre: 'Cobranza a Clientes con Retención IVA (75%) e ISLR (2%)',
     categoria: 'VENTAS',
     descripcion: 'Cobro de factura a un Contribuyente Especial (SPE) con descuento de comprobantes de retención.',
-    modulo_origen: 'Cuentas por Cobrar Profit',
+    modulo_origen: 'Cuentas por Cobrar & Tesorería',
     renglones: [
       { codigo_cuenta: '1.1.01.004', descripcion_cuenta: 'BANCO MERCANTIL C.A. (CORRIENTE VES)', naturaleza: 'DEBE', porcentaje_o_regla: 'Neto Transferido' },
       { codigo_cuenta: '1.1.04.003', descripcion_cuenta: 'RETENCIONES DE IVA SOPORTADAS (COMPROBANTES 75%/100%)', naturaleza: 'DEBE', porcentaje_o_regla: '75% del IVA facturado' },
@@ -75,7 +75,7 @@ export const MODELOS_PROFIT_PLUS: ComprobanteModeloProfit[] = [
     nombre: 'Compras de Mercancías a Crédito con Crédito Fiscal IVA',
     categoria: 'COMPRAS',
     descripcion: 'Recepción de Factura de Proveedor a crédito con Crédito Fiscal IVA deducible.',
-    modulo_origen: 'Compras / Cuentas por Pagar Profit',
+    modulo_origen: 'Compras & Cuentas por Pagar',
     renglones: [
       { codigo_cuenta: '5.1.01.001', descripcion_cuenta: 'COMPRAS DE MERCANCIAS NACIONALES GRAVADAS', naturaleza: 'DEBE', porcentaje_o_regla: '100% Base Imponible' },
       { codigo_cuenta: '1.1.04.001', descripcion_cuenta: 'CREDITO FISCAL IVA (16%)', naturaleza: 'DEBE', porcentaje_o_regla: '16% Alícuota General' },
@@ -88,7 +88,7 @@ export const MODELOS_PROFIT_PLUS: ComprobanteModeloProfit[] = [
     nombre: 'Pago a Proveedor con Retención de IVA (75%) e ISLR (3%)',
     categoria: 'COMPRAS',
     descripcion: 'Liquidación de factura a proveedor aplicando retención de IVA según Providencia SENIAT y retención de ISLR por servicios.',
-    modulo_origen: 'Cuentas por Pagar / Tesorería Profit',
+    modulo_origen: 'Cuentas por Pagar & Tesorería',
     renglones: [
       { codigo_cuenta: '2.1.01.001', descripcion_cuenta: 'PROVEEDORES NACIONALES (VES)', naturaleza: 'DEBE', porcentaje_o_regla: '100% Total Deuda Proveedor', requiere_auxiliar: true },
       { codigo_cuenta: '1.1.01.004', descripcion_cuenta: 'BANCO MERCANTIL C.A. (CORRIENTE VES)', naturaleza: 'HABER', porcentaje_o_regla: 'Neto Pagado por Transferencia' },
@@ -102,7 +102,7 @@ export const MODELOS_PROFIT_PLUS: ComprobanteModeloProfit[] = [
     nombre: 'Nómina Quincenal LOTTT (Sueldos y Retenciones Laborales)',
     categoria: 'NOMINA',
     descripcion: 'Causación y pago quincenal de salarios con retenciones obligatorias de IVSS, FAOV y Paro Forzoso.',
-    modulo_origen: 'Kantio Nómina / Profit Nómina',
+    modulo_origen: 'Kantio Nómina / Gestión Humana',
     renglones: [
       { codigo_cuenta: '6.1.01.001', descripcion_cuenta: 'GASTO DE SUELDOS Y SALARIOS (ADMINISTRACION)', naturaleza: 'DEBE', porcentaje_o_regla: 'Salario Bruto Devengado' },
       { codigo_cuenta: '2.1.04.003', descripcion_cuenta: 'RETENCIONES LABORALES IVSS (SEGURO SOCIAL) POR ENTERAR', naturaleza: 'HABER', porcentaje_o_regla: '4% Trabajador' },
@@ -117,7 +117,7 @@ export const MODELOS_PROFIT_PLUS: ComprobanteModeloProfit[] = [
     nombre: 'Aportes Patronales Parafiscales (IVSS, FAOV, INCES)',
     categoria: 'NOMINA',
     descripcion: 'Causación mensual de la carga parafiscal patronal sobre nómina según legislación venezolana.',
-    modulo_origen: 'Kantio Nómina / Profit Nómina',
+    modulo_origen: 'Kantio Nómina / Parafiscales',
     renglones: [
       { codigo_cuenta: '6.1.01.005', descripcion_cuenta: 'APORTES PATRONALES AL SEGURO SOCIAL (IVSS)', naturaleza: 'DEBE', porcentaje_o_regla: '9% al 11% según riesgo' },
       { codigo_cuenta: '6.1.01.006', descripcion_cuenta: 'APORTES PATRONALES AL FONDO DE VIVIENDA (FAOV)', naturaleza: 'DEBE', porcentaje_o_regla: '2% Aporte Patronal' },
@@ -158,7 +158,7 @@ export const MODELOS_PROFIT_PLUS: ComprobanteModeloProfit[] = [
     nombre: 'Depreciación Mensual de Activos Fijos (PPE)',
     categoria: 'AJUSTES',
     descripcion: 'Cálculo y distribución mensual de la depreciación por línea recta de mobiliario, computación y vehículos.',
-    modulo_origen: 'Activos Fijos Profit',
+    modulo_origen: 'Gestión de Activos Fijos',
     renglones: [
       { codigo_cuenta: '6.4.01.002', descripcion_cuenta: 'GASTO DEPREC. MOBILIARIO Y EQUIPOS', naturaleza: 'DEBE', porcentaje_o_regla: 'Cuota Mensual (10% anual)' },
       { codigo_cuenta: '6.4.01.003', descripcion_cuenta: 'GASTO DEPREC. EQUIPOS DE COMPUTACION', naturaleza: 'DEBE', porcentaje_o_regla: 'Cuota Mensual (33% anual)' },

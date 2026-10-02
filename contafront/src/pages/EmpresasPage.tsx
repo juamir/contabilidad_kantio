@@ -117,7 +117,7 @@ export const EmpresasPage: React.FC = () => {
     plan_suscripcion: 'ESTANDAR',
   });
 
-  // --- PARAMETRIZACIÓN DE LA EMPRESA (PROFIT 002) ---
+  // --- PARAMETRIZACIÓN DE LA EMPRESA (NIVELES & MÁSCARA) ---
   const [parametros, setParametros] = useState<EmpresaParametros>({
     niveles: 4,
     nivel_1: 1,
@@ -221,7 +221,7 @@ export const EmpresasPage: React.FC = () => {
           Configuración & Empresas Titulares
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Catálogo maestro de empresas, parámetros de máscara de cuentas, consecutivos y ejercicios contables (Estándar Profit Plus).
+          Catálogo maestro de empresas, parámetros de máscara de cuentas, consecutivos y ejercicios contables.
         </Typography>
       </Box>
 
@@ -330,7 +330,7 @@ export const EmpresasPage: React.FC = () => {
       )}
 
       {/* ============================================================== */}
-      {/* TAB 1: PARAMETRIZACIÓN DE LA EMPRESA (PROFIT 002)             */}
+      {/* TAB 1: PARAMETRIZACIÓN DE LA EMPRESA (MÁSCARA & CONSECUTIVOS)  */}
       {/* ============================================================== */}
       {activeTab === 1 && (
         <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
@@ -355,11 +355,11 @@ export const EmpresasPage: React.FC = () => {
             </Box>
 
             <Grid container spacing={3}>
-              {/* Sección Niveles y Máscara (Profit 002) */}
+              {/* Sección Niveles y Máscara */}
               <Grid item xs={12} md={7}>
                 <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
                   <Typography variant="subtitle2" fontWeight="bold" color="primary.main" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <SettingsSuggestIcon fontSize="small" /> Estructura de Niveles del Plan de Cuentas (002 - Niveles)
+                    <SettingsSuggestIcon fontSize="small" /> Estructura de Niveles del Plan de Cuentas
                   </Typography>
                   <Divider sx={{ my: 1.5 }} />
 
@@ -472,11 +472,11 @@ export const EmpresasPage: React.FC = () => {
                 </Paper>
               </Grid>
 
-              {/* Sección Consecutivos y Ejercicio (Profit 002) */}
+              {/* Sección Consecutivos y Ejercicio */}
               <Grid item xs={12} md={5}>
                 <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, mb: 2 }}>
                   <Typography variant="subtitle2" fontWeight="bold" color="primary.main" gutterBottom>
-                    Números Consecutivos (002 - Consecutivos)
+                    Números Consecutivos
                   </Typography>
                   <Divider sx={{ my: 1.5 }} />
                   <Grid container spacing={2}>

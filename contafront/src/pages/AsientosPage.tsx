@@ -46,7 +46,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import { useSearchParams } from 'react-router-dom';
-import { MODELOS_PROFIT_PLUS, ComprobanteModeloProfit } from '../data/modelosProfitPlus';
+import { MODELOS_CONTABLES_ESTANDAR, ComprobanteModelo } from '../data/modelosContablesEstandar';
 import { PUC_COMPLETO_VEN_NIF } from '../data/pucVenNifCompleto';
 
 interface Props {
@@ -376,8 +376,8 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
     }
   };
 
-  // Cargar modelo de Profit Plus en el voucher actual
-  const handleCargarModelo = (modelo: ComprobanteModeloProfit) => {
+  // Cargar plantilla modelo en el voucher actual
+  const handleCargarModelo = (modelo: ComprobanteModelo) => {
     setAsientoIdEditando(null);
     setNumero(`2026-10-000${asientosRegistrados.length + 1}`);
     setConcepto(`[${modelo.codigo}] ${modelo.nombre}`);
@@ -397,9 +397,9 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
     setSearchParams({ tab: 'asientos' });
   };
 
-  // --- TAB 1: MODELOS PROFIT FILTRO ---
+  // --- TAB 1: MODELOS CONTABLES FILTRO ---
   const [categoriaModelo, setCategoriaModelo] = useState<string>('TODAS');
-  const [modelosList, setModelosList] = useState<ComprobanteModeloProfit[]>(MODELOS_PROFIT_PLUS);
+  const [modelosList, setModelosList] = useState<ComprobanteModelo[]>(MODELOS_CONTABLES_ESTANDAR);
   const [modalModeloOpen, setModalModeloOpen] = useState(false);
   const [nuevoModeloForm, setNuevoModeloForm] = useState({
     codigo: '',
@@ -413,7 +413,7 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
       alert('Código y nombre de la plantilla son obligatorios.');
       return;
     }
-    const nuevo: ComprobanteModeloProfit = {
+    const nuevo: ComprobanteModelo = {
       id: `mod-${Date.now()}`,
       codigo: nuevoModeloForm.codigo,
       nombre: nuevoModeloForm.nombre,
@@ -495,7 +495,7 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
           2. Procesos Contables & Vouchers
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Registro bimonetario de comprobantes de diario, plantillas modelo de Profit Plus, cierres periódicos y ajuste por inflación.
+          Registro bimonetario de comprobantes de diario, plantillas modelo contables, cierres periódicos y ajuste por inflación.
         </Typography>
       </Box>
 
@@ -510,7 +510,7 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
           scrollButtons="auto"
         >
           <Tab icon={<ReceiptLongIcon />} iconPosition="start" label="Registro de Asientos (Vouchers)" />
-          <Tab icon={<AutoAwesomeIcon />} iconPosition="start" label="Comprobantes Modelo (Profit Plus)" />
+          <Tab icon={<AutoAwesomeIcon />} iconPosition="start" label="Comprobantes Modelo (Plantillas)" />
           <Tab icon={<LockClockIcon />} iconPosition="start" label="Cierre de Periodo / Ejercicio" />
           <Tab icon={<TrendingDownIcon />} iconPosition="start" label="Ajuste por Inflación (NIC 29)" />
           <Tab icon={<SyncAltIcon />} iconPosition="start" label="Integración Nómina & POS" />
@@ -775,7 +775,7 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
       )}
 
       {/* ============================================================== */}
-      {/* TAB 1: COMPROBANTES MODELO (PROFIT PLUS)                       */}
+      {/* TAB 1: COMPROBANTES MODELO (PLANTILLAS)                       */}
       {/* ============================================================== */}
       {activeTab === 1 && (
         <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
@@ -783,7 +783,7 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, flexWrap: 'wrap', gap: 2 }}>
               <Box>
                 <Typography variant="h6" fontWeight="bold">
-                  Catálogo de Comprobantes Modelo ({modelosFiltrados.length} Plantillas Profit Plus)
+                  Catálogo de Comprobantes Modelo ({modelosFiltrados.length} Plantillas Estándar)
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
                   Plantillas operativas para estandarizar registros contables frecuentes con cuentas predefinidas al Debe y Haber.
