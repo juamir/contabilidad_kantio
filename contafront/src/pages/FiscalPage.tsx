@@ -42,7 +42,10 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import PrintIcon from '@mui/icons-material/Print';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { useSearchParams } from 'react-router-dom';
+import { ComprobanteSeniatModal, ComprobanteRetencionData } from '../components/ComprobanteSeniatModal';
 
 interface Props {
   initialTab?: string;
@@ -137,9 +140,47 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
     { id: '5', fecha: '2026-10-05', tipo: 'VENTA', rif: 'J-50123456-7', nombre: 'INVERSIONES SAN CRISTOBAL S.A.', factura: '0000002', control: '00-000002', total: 9280.00, base: 8000.00, iva: 1280.00, ret_iva: 960.00, ret_islr: 160.00 },
   ]);
 
+  // Modal de Comprobante Oficial SENIAT (Impresión y Envío Email PDF)
+  const [comprobanteModalOpen, setComprobanteModalOpen] = useState(false);
+  const [comprobanteSeleccionado, setComprobanteSeleccionado] = useState<ComprobanteRetencionData | null>(null);
+
+  const handleVerComprobanteSeniat = (f: FacturaFiscalUI) => {
+    const periodo = f.fecha.slice(0, 7); // ej: "2026-10"
+    const periodoNum = periodo.replace('-', '');
+    const numComp = `${periodoNum}${f.id.padStart(8, '0').slice(-8)}`;
+
+    setComprobanteSeleccionado({
+      tipo: 'IVA',
+      numeroComprobante: numComp,
+      fechaEmision: f.fecha,
+      periodoFiscal: periodo,
+      agenteRazonSocial: 'KANTIO SERVICIOS CONTABLES Y FINANCIEROS C.A.',
+      agenteRif: 'J-50123456-7',
+      agenteDireccion: 'Av. Francisco de Miranda, Torre Kantio, Piso 8, Ofic. 802, Caracas, Venezuela',
+      sujetoRazonSocial: f.nombre,
+      sujetoRif: f.rif,
+      sujetoDireccion: 'Domicilio Fiscal Registrado en RIF',
+      sujetoEmail: 'contacto@' + f.nombre.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10) + '.com',
+      numeroOperacion: 1,
+      fechaFactura: f.fecha,
+      numeroFactura: f.factura,
+      numeroControl: f.control,
+      tipoTransaccion: '01-Reg',
+      montoTotalFactura: f.total,
+      montoExento: 0,
+      baseImponible: f.base,
+      alicuota: 16,
+      impuestoIva: f.iva,
+      porcentajeRetencion: f.iva > 0 ? Math.round((f.ret_iva / f.iva) * 100) : 75,
+      montoRetenido: f.ret_iva,
+    });
+    setComprobanteModalOpen(true);
+  };
+
   const handleGenerarComprobanteRetencion = () => {
+    const idGenerado = Date.now().toString();
     const nueva: FacturaFiscalUI = {
-      id: Date.now().toString(),
+      id: idGenerado,
       fecha: new Date().toISOString().split('T')[0],
       tipo: tipoOp,
       rif: rifTercero,
@@ -154,6 +195,9 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
     };
     setFacturas((prev) => [nueva, ...prev]);
     setToastMessage(`Comprobante fiscal registrado con éxito (Factura #${numeroFactura}).`);
+
+    // Abrir automáticamente el comprobante SENIAT para imprimir o enviar PDF
+    handleVerComprobanteSeniat(nueva);
   };
 
   // Modal para crear / editar factura directamente desde los libros
@@ -625,6 +669,13 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
                         Bs. {c.ret_iva.toFixed(2)}
                       </TableCell>
                       <TableCell sx={{ textAlign: 'center' }}>
+                        {c.ret_iva > 0 && (
+                          <Tooltip title="Imprimir / Enviar Comprobante Retención IVA (SENIAT)">
+                            <IconButton size="small" color="secondary" onClick={() => handleVerComprobanteSeniat(c)}>
+                              <PictureAsPdfIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
                         <Tooltip title="Modificar factura fiscal">
                           <IconButton size="small" color="primary" onClick={() => handleOpenFacturaModal(c)}>
                             <EditIcon fontSize="small" />
@@ -773,6 +824,13 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
           <Button variant="contained" onClick={handleSaveFactura}>Guardar Factura</Button>
         </DialogActions>
       </Dialog>
+
+      {/* --- MODAL OFICIAL COMPROBANTE DE RETENCIÓN SENIAT (PDF / IMPRESIÓN / CORREO) --- */}
+      <ComprobanteSeniatModal
+        open={comprobanteModalOpen}
+        onClose={() => setComprobanteModalOpen(false)}
+        data={comprobanteSeleccionado}
+      />
     </Box>
   );
 };

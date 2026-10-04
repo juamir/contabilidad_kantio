@@ -1,0 +1,62 @@
+/* Estilos globales para la aplicación Kantio Contabilidad */
+@media print {
+  /* Ocultar elementos de interfaz en impresión */
+  header,
+  nav,
+  aside,
+  .MuiDrawer-root,
+  .MuiAppBar-root,
+  .no-print,
+  button,
+  .MuiTabs-root {
+    display: none !important;
+  }
+
+  body,
+  #root,
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: #ffffff !important;
+    width: 100% !important;
+  }
+
+  /* Asegurar tamaño carta / A4 legal */
+  @page {
+    size: letter landscape;
+    margin: 10mm;
+  }
+
+  .print-portrait {
+    page-break-inside: avoid;
+  }
+}
+
+/* Scrollbar suave para tabletas y ordenadores */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Mejorar interacción táctil en tablets */
+@media (hover: none) and (pointer: coarse) {
+  .MuiListItemButton-root {
+    min-height: 48px;
+  }
+  .MuiIconButton-root {
+    padding: 10px;
+  }
+}
