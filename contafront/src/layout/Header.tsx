@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -37,18 +37,13 @@ import { useAuthStore, Empresa } from '../store/useAuthStore';
 import { DRAWER_WIDTH_OPEN, DRAWER_WIDTH_COLLAPSED } from './Sidebar';
 import { NotificationsPopover } from '../components/NotificationsPopover';
 import { UserProfileModal } from '../components/UserProfileModal';
+import { api } from '../services/api';
 
 interface HeaderProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   onOpenHelp: () => void;
 }
-
-const EMPRESAS_DISPONIBLES: Empresa[] = [
-  { id: '1', codigo: 'DEMOC', razon_social: 'CORPORACION DEMO KANTIO C.A.', rif: 'J-50123456-7' },
-  { id: '2', codigo: 'ALIMC', razon_social: 'DISTRIBUIDORA DE ALIMENTOS DEL CENTRO S.A.', rif: 'J-40998877-1' },
-  { id: '3', codigo: 'LOGIS', razon_social: 'LOGISTICA & TRANSPORTE VALENCIA EXPRESS C.A.', rif: 'J-30111222-3' },
-];
 
 export const Header: React.FC<HeaderProps> = ({
   sidebarOpen,
@@ -58,6 +53,25 @@ export const Header: React.FC<HeaderProps> = ({
   const { user, empresaActiva, setEmpresaActiva, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const [empresasDisponibles, setEmpresasDisponibles] = useState<Empresa[]>([]);
+
+  useEffect(() => {
+    const fetchEmpresas = async () => {
+      try {
+        const data = await api.get<Empresa[]>('/empresas/');
+        if (Array.isArray(data) && data.length > 0) {
+          setEmpresasDisponibles(data);
+          if (!empresaActiva || !data.some((e) => e.id === empresaActiva.id)) {
+            setEmpresaActiva(data[0]);
+          }
+        }
+      } catch (err) {
+        console.warn('No se pudieron obtener empresas desde el servidor en Header:', err);
+      }
+    };
+    fetchEmpresas();
+  }, []);
 
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
@@ -343,8 +357,8 @@ export const Header: React.FC<HeaderProps> = ({
             Empresas y clientes autorizados para su usuario:
           </Typography>
           <List>
-            {EMPRESAS_DISPONIBLES.map((emp) => {
-              const isSelected = empresaActiva?.id === emp.id || (!empresaActiva && emp.codigo === 'DEMOC');
+            {empresasDisponibles.map((emp) => {
+              const isSelected = empresaActiva?.id === emp.id;
               return (
                 <ListItemButton
                   key={emp.id}

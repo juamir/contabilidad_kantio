@@ -48,6 +48,8 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import { useSearchParams } from 'react-router-dom';
 import { MODELOS_CONTABLES_ESTANDAR, ComprobanteModelo } from '../data/modelosContablesEstandar';
 import { PUC_COMPLETO_VEN_NIF } from '../data/pucVenNifCompleto';
+import { api } from '../services/api';
+import { useAuthStore } from '../store/useAuthStore';
 
 interface Props {
   initialTab?: string;
@@ -157,44 +159,43 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
     },
   ]);
 
+  const empresaActiva = useAuthStore((s) => s.empresaActiva);
+
   // Historial de asientos registrados
-  const [asientosRegistrados, setAsientosRegistrados] = useState<ComprobanteRegistradoUI[]>([
-    {
-      id: 'comp-01',
-      numero: '2026-10-0001',
-      fecha: '2026-10-01',
-      tipo: 'DIARIO',
-      concepto: 'Registro de ventas y operaciones comerciales del día',
-      tasaBcv: 40.0,
-      totalDebitoBase: 4640.0,
-      totalCreditoBase: 4640.0,
-      totalDebitoDivisa: 116.0,
-      totalCreditoDivisa: 116.0,
-      estado: 'ASENTADO',
-      renglones: [
-        { id: '1', cuentaCodigo: '1.1.01.004', cuentaNombre: 'BANCO MERCANTIL C.A. (CORRIENTE VES)', descripcion: 'Cobro de factura cliente por transferencia', debitoBase: 4640.0, creditoBase: 0, debitoDivisa: 116.0, creditoDivisa: 0 },
-        { id: '2', cuentaCodigo: '4.1.01.001', cuentaNombre: 'VENTAS DE MERCANCIAS GRAVADAS CON IVA (16%)', descripcion: 'Ingreso por venta de mercancías gravadas', debitoBase: 0, creditoBase: 4000.0, debitoDivisa: 0, creditoDivisa: 100.0 },
-        { id: '3', cuentaCodigo: '2.1.03.001', cuentaNombre: 'DEBITO FISCAL IVA (16%)', descripcion: 'Débito Fiscal IVA 16% Factura', debitoBase: 0, creditoBase: 640.0, debitoDivisa: 0, creditoDivisa: 16.0 },
-      ]
-    },
-    {
-      id: 'comp-02',
-      numero: '2026-10-0002',
-      fecha: '2026-10-02',
-      tipo: 'EGRESOS',
-      concepto: 'Cancelación de factura a proveedor de insumos industriales',
-      tasaBcv: 40.0,
-      totalDebitoBase: 5800.0,
-      totalCreditoBase: 5800.0,
-      totalDebitoDivisa: 145.0,
-      totalCreditoDivisa: 145.0,
-      estado: 'ASENTADO',
-      renglones: [
-        { id: '1', cuentaCodigo: '2.1.01.001', cuentaNombre: 'CUENTAS POR PAGAR COMERCIALES NACIONALES', descripcion: 'Pago Factura Proveedor', debitoBase: 5800.0, creditoBase: 0, debitoDivisa: 145.0, creditoDivisa: 0 },
-        { id: '2', cuentaCodigo: '1.1.01.004', cuentaNombre: 'BANCO MERCANTIL C.A. (CORRIENTE VES)', descripcion: 'Salida Banco Pago Proveedor', debitoBase: 0, creditoBase: 5800.0, debitoDivisa: 0, creditoDivisa: 145.0 },
-      ]
+  const [asientosRegistrados, setAsientosRegistrados] = useState<ComprobanteRegistradoUI[]>([]);
+
+  const cargarAsientos = async () => {
+    if (!empresaActiva?.id) return;
+    try {
+      const data = await api.get<any[]>(`/asientos/empresas/${empresaActiva.id}`);
+      if (Array.isArray(data) && data.length > 0) {
+        setAsientosRegistrados(
+          data.map((c) => ({
+            id: c.id,
+            numero: c.numero,
+            fecha: c.fecha,
+            tipo: c.tipo,
+            concepto: c.concepto,
+            tasaBcv: c.tasa_cambio || 40.0,
+            totalDebitoBase: c.total_debito_base || 0,
+            totalCreditoBase: c.total_credito_base || 0,
+            totalDebitoDivisa: c.total_debito_divisa || 0,
+            totalCreditoDivisa: c.total_credito_divisa || 0,
+            estado: c.estado,
+            renglones: [],
+          }))
+        );
+      } else {
+        setAsientosRegistrados([]);
+      }
+    } catch (err) {
+      console.warn('Error cargando asientos desde la API:', err);
     }
-  ]);
+  };
+
+  useEffect(() => {
+    cargarAsientos();
+  }, [empresaActiva?.id]);
 
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
 
@@ -232,19 +233,33 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
     setMostrarFormulario(true);
   };
 
-  const handleAnularAsiento = (id: string, num: string) => {
+  const handleAnularAsiento = async (id: string, num: string) => {
     if (window.confirm(`¿Está seguro de anular formalmente el comprobante ${num}? (Quedará registrado para auditoría con saldo cero)`)) {
-      setAsientosRegistrados((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, estado: 'ANULADO' as const } : a))
-      );
-      setToastMessage(`Comprobante ${num} anulado con éxito.`);
+      try {
+        if (!id.startsWith('comp-')) {
+          await api.post(`/asientos/${id}/anular`, {});
+        }
+        setAsientosRegistrados((prev) =>
+          prev.map((a) => (a.id === id ? { ...a, estado: 'ANULADO' as const } : a))
+        );
+        setToastMessage(`Comprobante ${num} anulado con éxito en la base de datos.`);
+      } catch (err: any) {
+        alert(`Error al anular comprobante: ${err.message || err}`);
+      }
     }
   };
 
-  const handleEliminarAsiento = (id: string, num: string) => {
+  const handleEliminarAsiento = async (id: string, num: string) => {
     if (window.confirm(`¿Desea eliminar el borrador del comprobante ${num}?`)) {
-      setAsientosRegistrados((prev) => prev.filter((a) => a.id !== id));
-      setToastMessage(`Comprobante ${num} eliminado.`);
+      try {
+        if (!id.startsWith('comp-')) {
+          await api.delete(`/asientos/${id}`);
+        }
+        setAsientosRegistrados((prev) => prev.filter((a) => a.id !== id));
+        setToastMessage(`Comprobante ${num} eliminado con éxito.`);
+      } catch (err: any) {
+        alert(`Error al eliminar comprobante: ${err.message || err}`);
+      }
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -62,47 +62,16 @@ interface EmpresaParametros {
   inicio_contabilidad: string;
 }
 
+import { api } from '../services/api';
+
 export const EmpresasPage: React.FC = () => {
   const { empresaActiva, setEmpresaActiva } = useAuthStore();
   const [activeTab, setActiveTab] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // --- LISTA DE EMPRESAS PARA GESTIÓN GLOBAL / SAAS ---
-  const [empresas, setEmpresas] = useState([
-    {
-      id: '1',
-      codigo: 'DEMOC',
-      razon_social: 'CORPORACION DEMO KANTIO C.A.',
-      nombre_comercial: 'Kantio Cloud Services',
-      rif: 'J-50123456-7',
-      nit: '01020304',
-      prioridad: 0,
-      plan_suscripcion: 'ESTANDAR',
-      activo: true,
-    },
-    {
-      id: '2',
-      codigo: 'ALIMC',
-      razon_social: 'DISTRIBUIDORA DE ALIMENTOS DEL CENTRO S.A.',
-      nombre_comercial: 'Alimentos Centro',
-      rif: 'J-40998877-1',
-      nit: '01020305',
-      prioridad: 1,
-      plan_suscripcion: 'CORPORATIVO',
-      activo: true,
-    },
-    {
-      id: '3',
-      codigo: 'LOGIS',
-      razon_social: 'LOGISTICA & TRANSPORTE VALENCIA EXPRESS C.A.',
-      nombre_comercial: 'Valencia Express',
-      rif: 'J-30111222-3',
-      nit: '01020306',
-      prioridad: 2,
-      plan_suscripcion: 'ESTANDAR',
-      activo: true,
-    }
-  ]);
+  const [empresas, setEmpresas] = useState<any[]>([]);
 
   // Modal Empresa
   const [modalEmpresaOpen, setModalEmpresaOpen] = useState(false);
@@ -129,13 +98,78 @@ export const EmpresasPage: React.FC = () => {
     longitud_total: 7,
     caracter_separacion: '.',
     mascara_formato: 'X.X.XX.XXX',
-    consecutivo_contabilizacion: 224,
-    consecutivo_depreciacion: 4,
+    consecutivo_contabilizacion: 1,
+    consecutivo_depreciacion: 1,
     consecutivo_comprobante_cierre: 1,
     inicio_ejercicio: '2026-01-01',
     fin_ejercicio: '2026-12-31',
-    inicio_contabilidad: '2025-12-31'
+    inicio_contabilidad: '2026-01-01'
   });
+
+  // Cargar lista de empresas desde la API
+  const cargarEmpresas = async () => {
+    try {
+      setLoading(true);
+      const data = await api.get<any[]>('/empresas/');
+      if (Array.isArray(data) && data.length > 0) {
+        setEmpresas(data);
+        // Si no hay empresa activa seleccionada o la actual no está en la lista, seleccionar la primera
+        if (!empresaActiva || !data.some(e => e.id === empresaActiva.id)) {
+          setEmpresaActiva({
+            id: data[0].id,
+            codigo: data[0].codigo,
+            razon_social: data[0].razon_social,
+            rif: data[0].rif,
+          });
+        }
+      } else {
+        setEmpresas([]);
+      }
+    } catch (err: any) {
+      console.error('Error cargando empresas:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cargar parámetros de la empresa activa
+  const cargarParametros = async (empId: string) => {
+    try {
+      const data = await api.get<any>(`/empresas/${empId}/parametros`);
+      if (data) {
+        setParametros({
+          niveles: data.niveles || 4,
+          nivel_1: data.nivel_1 ?? 1,
+          nivel_2: data.nivel_2 ?? 1,
+          nivel_3: data.nivel_3 ?? 2,
+          nivel_4: data.nivel_4 ?? 3,
+          nivel_5: data.nivel_5 ?? 0,
+          nivel_6: data.nivel_6 ?? 0,
+          longitud_total: data.longitud_total || 7,
+          caracter_separacion: data.caracter_separacion || '.',
+          mascara_formato: data.mascara_formato || 'X.X.XX.XXX',
+          consecutivo_contabilizacion: data.consecutivo_contabilizacion || 1,
+          consecutivo_depreciacion: data.consecutivo_depreciacion || 1,
+          consecutivo_comprobante_cierre: data.consecutivo_comprobante_cierre || 1,
+          inicio_ejercicio: data.inicio_ejercicio ? String(data.inicio_ejercicio).split('T')[0] : '2026-01-01',
+          fin_ejercicio: data.fin_ejercicio ? String(data.fin_ejercicio).split('T')[0] : '2026-12-31',
+          inicio_contabilidad: data.inicio_contabilidad ? String(data.inicio_contabilidad).split('T')[0] : '2026-01-01',
+        });
+      }
+    } catch (err) {
+      console.warn('No se pudieron obtener parámetros de empresa desde la API, usando valores locales');
+    }
+  };
+
+  useEffect(() => {
+    cargarEmpresas();
+  }, []);
+
+  useEffect(() => {
+    if (empresaActiva?.id) {
+      cargarParametros(empresaActiva.id);
+    }
+  }, [empresaActiva?.id]);
 
   const recalcularMascara = (p: Partial<EmpresaParametros>) => {
     const updated = { ...parametros, ...p };
@@ -158,7 +192,15 @@ export const EmpresasPage: React.FC = () => {
   const handleOpenEmpresaModal = (emp?: any) => {
     if (emp) {
       setEmpresaEditando(emp);
-      setEmpresaForm({ ...emp });
+      setEmpresaForm({
+        codigo: emp.codigo || '',
+        razon_social: emp.razon_social || '',
+        nombre_comercial: emp.nombre_comercial || '',
+        rif: emp.rif || '',
+        nit: emp.nit || '',
+        prioridad: emp.prioridad || 0,
+        plan_suscripcion: emp.plan_suscripcion || 'ESTANDAR',
+      });
     } else {
       setEmpresaEditando(null);
       setEmpresaForm({
@@ -174,33 +216,116 @@ export const EmpresasPage: React.FC = () => {
     setModalEmpresaOpen(true);
   };
 
-  const handleSaveEmpresa = () => {
+  const handleSaveEmpresa = async () => {
     if (!empresaForm.codigo || !empresaForm.razon_social || !empresaForm.rif) {
       alert('Código, Razón Social y RIF son obligatorios.');
       return;
     }
-    if (empresaEditando) {
-      setEmpresas((prev) =>
-        prev.map((e) => (e.id === empresaEditando.id ? { ...e, ...empresaForm } : e))
-      );
-      setToastMessage(`Empresa ${empresaForm.razon_social} actualizada.`);
-    } else {
-      const nueva = { ...empresaForm, id: Date.now().toString(), activo: true };
-      setEmpresas((prev) => [...prev, nueva]);
-      setToastMessage(`Empresa ${empresaForm.razon_social} creada con éxito.`);
+
+    try {
+      if (empresaEditando) {
+        const payload = {
+          razon_social: empresaForm.razon_social,
+          nombre_comercial: empresaForm.nombre_comercial,
+          rif: empresaForm.rif.toUpperCase().trim(),
+          nit: empresaForm.nit,
+          prioridad: Number(empresaForm.prioridad) || 0,
+          plan_suscripcion: empresaForm.plan_suscripcion,
+        };
+        const updated = await api.put<any>(`/empresas/${empresaEditando.id}`, payload);
+        setEmpresas((prev) =>
+          prev.map((e) => (e.id === empresaEditando.id ? { ...e, ...updated } : e))
+        );
+        if (empresaActiva?.id === empresaEditando.id) {
+          setEmpresaActiva({
+            id: updated.id,
+            codigo: updated.codigo,
+            razon_social: updated.razon_social,
+            rif: updated.rif,
+          });
+        }
+        setToastMessage(`Empresa ${empresaForm.razon_social} actualizada con éxito en la base de datos.`);
+      } else {
+        const payload = {
+          codigo: empresaForm.codigo.toUpperCase().trim(),
+          razon_social: empresaForm.razon_social.trim(),
+          nombre_comercial: empresaForm.nombre_comercial.trim(),
+          rif: empresaForm.rif.toUpperCase().trim(),
+          nit: empresaForm.nit.trim(),
+          prioridad: Number(empresaForm.prioridad) || 0,
+          plan_suscripcion: empresaForm.plan_suscripcion,
+        };
+        const created = await api.post<any>('/empresas/', payload);
+        setEmpresas((prev) => [...prev, created]);
+        // Si no había empresa activa o es la primera, activarla
+        if (!empresaActiva) {
+          setEmpresaActiva({
+            id: created.id,
+            codigo: created.codigo,
+            razon_social: created.razon_social,
+            rif: created.rif,
+          });
+        }
+        setToastMessage(`Empresa ${created.razon_social} creada con éxito y Plan de Cuentas inicial sembrado.`);
+      }
+      setModalEmpresaOpen(false);
+    } catch (err: any) {
+      alert(`Error al guardar empresa: ${err.message || err}`);
     }
-    setModalEmpresaOpen(false);
   };
 
-  const handleDeleteEmpresa = (id: string, razon: string) => {
+  const handleDeleteEmpresa = async (id: string, razon: string) => {
     if (window.confirm(`¿Desea desactivar la empresa ${razon}?`)) {
-      setEmpresas((prev) => prev.filter((e) => e.id !== id));
-      setToastMessage(`Empresa ${razon} desactivada.`);
+      try {
+        await api.delete(`/empresas/${id}`);
+        setEmpresas((prev) => prev.filter((e) => e.id !== id));
+        if (empresaActiva?.id === id) {
+          const restantes = empresas.filter((e) => e.id !== id);
+          if (restantes.length > 0) {
+            setEmpresaActiva({
+              id: restantes[0].id,
+              codigo: restantes[0].codigo,
+              razon_social: restantes[0].razon_social,
+              rif: restantes[0].rif,
+            });
+          }
+        }
+        setToastMessage(`Empresa ${razon} desactivada.`);
+      } catch (err: any) {
+        alert(`Error al desactivar la empresa: ${err.message || err}`);
+      }
     }
   };
 
-  const handleGuardarParametros = () => {
-    setToastMessage('Parámetros de empresa (niveles, consecutivos y máscaras) guardados con éxito.');
+  const handleGuardarParametros = async () => {
+    if (!empresaActiva?.id) {
+      alert('Debe tener una empresa activa seleccionada para guardar sus parámetros.');
+      return;
+    }
+    try {
+      const payload = {
+        niveles: Number(parametros.niveles),
+        nivel_1: Number(parametros.nivel_1),
+        nivel_2: Number(parametros.nivel_2),
+        nivel_3: Number(parametros.nivel_3),
+        nivel_4: Number(parametros.nivel_4),
+        nivel_5: Number(parametros.nivel_5),
+        nivel_6: Number(parametros.nivel_6),
+        longitud_total: Number(parametros.longitud_total),
+        caracter_separacion: parametros.caracter_separacion,
+        mascara_formato: parametros.mascara_formato,
+        consecutivo_contabilizacion: Number(parametros.consecutivo_contabilizacion),
+        consecutivo_depreciacion: Number(parametros.consecutivo_depreciacion),
+        consecutivo_comprobante_cierre: Number(parametros.consecutivo_comprobante_cierre),
+        inicio_ejercicio: parametros.inicio_ejercicio,
+        fin_ejercicio: parametros.fin_ejercicio,
+        inicio_contabilidad: parametros.inicio_contabilidad,
+      };
+      await api.put(`/empresas/${empresaActiva.id}/parametros`, payload);
+      setToastMessage('Parámetros de empresa (niveles, consecutivos y máscaras) guardados con éxito en la base de datos.');
+    } catch (err: any) {
+      alert(`Error al guardar parámetros: ${err.message || err}`);
+    }
   };
 
   return (

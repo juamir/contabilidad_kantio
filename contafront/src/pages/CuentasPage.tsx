@@ -99,23 +99,65 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // --- TAB 0: PUC ESTADOS Y CRUD ---
-  const [cuentasList, setCuentasList] = useState<CuentaPUC[]>(PUC_COMPLETO_VEN_NIF);
+  const [cuentasList, setCuentasList] = useState<CuentaPUC[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroNivel, setFiltroNivel] = useState<number | 'TODOS'>('TODOS');
   const [filtroTipo, setFiltroTipo] = useState<string>('TODOS');
+  const [loadingCuentas, setLoadingCuentas] = useState(false);
+
+  // Cargar cuentas desde la API
+  const cargarCuentas = async () => {
+    if (!empresaActiva?.id) return;
+    try {
+      setLoadingCuentas(true);
+      const data = await api.get<any[]>(`/cuentas/empresas/${empresaActiva.id}`);
+      if (Array.isArray(data) && data.length > 0) {
+        setCuentasList(data);
+      } else {
+        // Si no hay cuentas en BD para esta empresa, usar el PUC_COMPLETO como respaldo
+        setCuentasList(PUC_COMPLETO_VEN_NIF);
+      }
+    } catch (err) {
+      console.warn('Error cargando cuentas desde API, usando catálogo base:', err);
+      setCuentasList(PUC_COMPLETO_VEN_NIF);
+    } finally {
+      setLoadingCuentas(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarCuentas();
+  }, [empresaActiva?.id]);
 
   // Modal Cuenta
   const [modalCuentaOpen, setModalCuentaOpen] = useState(false);
-  const [cuentaEditando, setCuentaEditando] = useState<CuentaPUC | null>(null);
+  const [cuentaEditando, setCuentaEditando] = useState<any | null>(null);
 
   // Modal Movimientos Históricos
   const [modalMovimientosOpen, setModalMovimientosOpen] = useState(false);
-  const [cuentaMovimientosSeleccionada, setCuentaMovimientosSeleccionada] = useState<CuentaPUC | null>(null);
+  const [cuentaMovimientosSeleccionada, setCuentaMovimientosSeleccionada] = useState<any | null>(null);
   const [movimientosData, setMovimientosData] = useState<Array<{ fecha: string; comprobante: string; concepto: string; debe: number; haber: number }>>([]);
 
-  const handleVerMovimientos = (cuenta: CuentaPUC) => {
+  const handleVerMovimientos = async (cuenta: any) => {
     setCuentaMovimientosSeleccionada(cuenta);
-    // Simular o cargar movimientos
+    if (cuenta.id) {
+      try {
+        const res = await api.get<any>(`/cuentas/${cuenta.id}/movimientos`);
+        if (res && res.movimientos && res.movimientos.length > 0) {
+          setMovimientosData(res.movimientos.map((m: any) => ({
+            fecha: m.fecha,
+            comprobante: m.comprobante_numero || 'COMP',
+            concepto: m.concepto || m.descripcion,
+            debe: m.debe || 0,
+            haber: m.haber || 0
+          })));
+          setModalMovimientosOpen(true);
+          return;
+        }
+      } catch (err) {
+        // fallback
+      }
+    }
     setMovimientosData([
       { fecha: '2026-01-01', comprobante: 'AS-APE-001', concepto: 'Asiento de Apertura de Ejercicio Económico', debe: cuenta.naturaleza === 'DEUDORA' ? 50000 : 0, haber: cuenta.naturaleza === 'ACREEDORA' ? 50000 : 0 },
       { fecha: '2026-01-15', comprobante: 'AS-OPE-004', concepto: 'Operaciones Comerciales del Periodo', debe: 12500, haber: 4200 },
@@ -143,7 +185,7 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
     requiere_documento: false,
   });
 
-  const handleOpenCuentaModal = (cuenta?: CuentaPUC) => {
+  const handleOpenCuentaModal = (cuenta?: any) => {
     if (cuenta) {
       setCuentaEditando(cuenta);
       setCuentaForm({
@@ -173,7 +215,6 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
   };
 
   const handleCodigoChange = (raw: string) => {
-    // Al escribir, inferir automáticamente clase y naturaleza
     const inferred = inferirClaseContable(raw);
     const nivelCalculado = raw.includes('.') ? Math.min(raw.split('.').filter(Boolean).length, 6) : 1;
     setCuentaForm((prev) => ({
@@ -186,7 +227,6 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
   };
 
   const handleBlurCodigo = () => {
-    // Al salir del campo, autocompletar con máscara expandiendo ceros (ej: 1.1.1.6 -> 1.1.01.006)
     if (cuentaForm.codigo) {
       const formatted = formatearCodigoContable(cuentaForm.codigo);
       const inferred = inferirClaseContable(formatted);
@@ -206,37 +246,62 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
       alert('Por favor ingrese código y descripción');
       return;
     }
-    if (cuentaEditando) {
-      // Modificar existente
-      setCuentasList((prev) =>
-        prev.map((c) =>
-          c.codigo === cuentaEditando.codigo
-            ? { ...c, ...cuentaForm }
-            : c
-        )
-      );
-      setToastMessage(`Cuenta ${cuentaForm.codigo} actualizada con éxito.`);
-    } else {
-      // Agregar nueva
-      const nueva: CuentaPUC = {
-        codigo: cuentaForm.codigo,
-        descripcion: cuentaForm.descripcion,
-        nivel: Number(cuentaForm.nivel),
-        naturaleza: cuentaForm.naturaleza,
-        tipo_cuenta: cuentaForm.tipo_cuenta,
-        permite_movimiento: cuentaForm.permite_movimiento,
-        requiere_auxiliar: cuentaForm.requiere_auxiliar,
-        requiere_documento: cuentaForm.requiere_documento,
-      };
-      setCuentasList((prev) => [...prev, nueva].sort((a, b) => a.codigo.localeCompare(b.codigo)));
-      setToastMessage(`Cuenta ${cuentaForm.codigo} creada con éxito.`);
+
+    try {
+      if (cuentaEditando?.id) {
+        // Modificar existente en backend
+        const updated = await api.put<any>(`/cuentas/${cuentaEditando.id}`, {
+          descripcion: cuentaForm.descripcion,
+          nivel: Number(cuentaForm.nivel),
+          naturaleza: cuentaForm.naturaleza,
+          tipo_cuenta: cuentaForm.tipo_cuenta,
+          permite_movimiento: cuentaForm.permite_movimiento,
+          requiere_auxiliar: cuentaForm.requiere_auxiliar,
+          requiere_documento: cuentaForm.requiere_documento,
+        });
+        setCuentasList((prev) =>
+          prev.map((c) => (c.codigo === cuentaEditando.codigo ? { ...c, ...updated } : c))
+        );
+        setToastMessage(`Cuenta ${cuentaForm.codigo} actualizada con éxito en la base de datos.`);
+      } else if (empresaActiva?.id) {
+        // Crear nueva en backend
+        const created = await api.post<any>(`/cuentas/empresas/${empresaActiva.id}`, {
+          codigo: cuentaForm.codigo,
+          descripcion: cuentaForm.descripcion,
+          nivel: Number(cuentaForm.nivel),
+          naturaleza: cuentaForm.naturaleza,
+          tipo_cuenta: cuentaForm.tipo_cuenta,
+          permite_movimiento: cuentaForm.permite_movimiento,
+          requiere_auxiliar: cuentaForm.requiere_auxiliar,
+          requiere_documento: cuentaForm.requiere_documento,
+        });
+        setCuentasList((prev) => [...prev, created].sort((a, b) => a.codigo.localeCompare(b.codigo)));
+        setToastMessage(`Cuenta ${cuentaForm.codigo} creada con éxito en la base de datos.`);
+      } else {
+        const nueva: any = { ...cuentaForm };
+        setCuentasList((prev) => [...prev, nueva].sort((a, b) => a.codigo.localeCompare(b.codigo)));
+        setToastMessage(`Cuenta ${cuentaForm.codigo} guardada localmente.`);
+      }
+      setModalCuentaOpen(false);
+    } catch (err: any) {
+      alert(`Error al guardar cuenta: ${err.message || err}`);
     }
-    setModalCuentaOpen(false);
   };
 
-
-  const handleDeleteCuenta = (codigo: string) => {
+  const handleDeleteCuenta = async (codigo: string) => {
     if (window.confirm(`¿Está seguro de eliminar o desactivar la cuenta contable ${codigo}?`)) {
+      const encontrada = cuentasList.find((c) => c.codigo === codigo);
+      if (encontrada && (encontrada as any).id) {
+        try {
+          await api.delete(`/cuentas/${(encontrada as any).id}`);
+          setCuentasList((prev) => prev.filter((c) => c.codigo !== codigo));
+          setToastMessage(`Cuenta ${codigo} desactivada en la base de datos.`);
+          return;
+        } catch (err: any) {
+          alert(`Error al desactivar cuenta: ${err.message || err}`);
+          return;
+        }
+      }
       setCuentasList((prev) => prev.filter((c) => c.codigo !== codigo));
       setToastMessage(`Cuenta ${codigo} eliminada.`);
     }
@@ -252,13 +317,25 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
   });
 
   // --- TAB 1: CENTROS DE COSTO ---
-  const [centrosCosto, setCentrosCosto] = useState([
-    { id: '1', codigo: 'CC-ADM-01', nombre: 'Administración y Finanzas Central', responsable: 'Lic. Ana Blanco', presupuesto_ves: 150000, presupuesto_usd: 3750, estado: 'ACTIVO' },
-    { id: '2', codigo: 'CC-VEN-01', nombre: 'Ventas, Mercadeo & E-commerce', responsable: 'Ing. Marcos Rivas', presupuesto_ves: 220000, presupuesto_usd: 5500, estado: 'ACTIVO' },
-    { id: '3', codigo: 'CC-OPS-01', nombre: 'Operaciones, Logística & Despacho', responsable: 'T.S.U. Pedro Díaz', presupuesto_ves: 180000, presupuesto_usd: 4500, estado: 'ACTIVO' },
-    { id: '4', codigo: 'CC-TEC-01', nombre: 'Tecnología, Sistemas & Nube', responsable: 'Ing. Juamir Gómez', presupuesto_ves: 120000, presupuesto_usd: 3000, estado: 'ACTIVO' },
-    { id: '5', codigo: 'CC-ALM-01', nombre: 'Almacén Principal Caracas', responsable: 'Carlos Romero', presupuesto_ves: 95000, presupuesto_usd: 2375, estado: 'ACTIVO' },
-  ]);
+  const [centrosCosto, setCentrosCosto] = useState<any[]>([]);
+
+  const cargarCentrosCosto = async () => {
+    if (!empresaActiva?.id) return;
+    try {
+      const data = await api.get<any[]>(`/centros-costo/empresas/${empresaActiva.id}`);
+      if (Array.isArray(data) && data.length > 0) {
+        setCentrosCosto(data);
+      } else {
+        setCentrosCosto([]);
+      }
+    } catch (err) {
+      console.warn('Error cargando centros de costo desde API:', err);
+    }
+  };
+
+  useEffect(() => {
+    cargarCentrosCosto();
+  }, [empresaActiva?.id]);
 
   const [modalCcOpen, setModalCcOpen] = useState(false);
   const [ccEditando, setCcEditando] = useState<any | null>(null);
@@ -289,27 +366,50 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
     setModalCcOpen(true);
   };
 
-  const handleSaveCc = () => {
+  const handleSaveCc = async () => {
     if (!ccForm.codigo || !ccForm.nombre) {
       alert('Código y nombre del centro de costo son requeridos.');
       return;
     }
-    if (ccEditando) {
-      setCentrosCosto((prev) =>
-        prev.map((c) => (c.id === ccEditando.id ? { ...c, ...ccForm } : c))
-      );
-      setToastMessage(`Centro de Costo ${ccForm.codigo} modificado.`);
-    } else {
-      setCentrosCosto((prev) => [...prev, { ...ccForm, id: Date.now().toString() }]);
-      setToastMessage(`Centro de Costo ${ccForm.codigo} creado.`);
+    try {
+      if (ccEditando?.id && !ccEditando.id.toString().startsWith('mock-')) {
+        const updated = await api.put<any>(`/centros-costo/${ccEditando.id}`, {
+          nombre: ccForm.nombre,
+          activo: ccForm.estado === 'ACTIVO',
+        });
+        setCentrosCosto((prev) =>
+          prev.map((c) => (c.id === ccEditando.id ? { ...c, ...updated, ...ccForm } : c))
+        );
+        setToastMessage(`Centro de Costo ${ccForm.codigo} modificado con éxito.`);
+      } else if (empresaActiva?.id) {
+        const created = await api.post<any>(`/centros-costo/empresas/${empresaActiva.id}`, {
+          codigo: ccForm.codigo.toUpperCase().trim(),
+          nombre: ccForm.nombre.trim(),
+          activo: ccForm.estado === 'ACTIVO',
+        });
+        setCentrosCosto((prev) => [...prev, { ...created, ...ccForm }]);
+        setToastMessage(`Centro de Costo ${ccForm.codigo} creado en la base de datos.`);
+      } else {
+        setCentrosCosto((prev) => [...prev, { ...ccForm, id: Date.now().toString() }]);
+        setToastMessage(`Centro de Costo ${ccForm.codigo} creado.`);
+      }
+      setModalCcOpen(false);
+    } catch (err: any) {
+      alert(`Error al guardar centro de costo: ${err.message || err}`);
     }
-    setModalCcOpen(false);
   };
 
-  const handleDeleteCc = (id: string, codigo: string) => {
+  const handleDeleteCc = async (id: string, codigo: string) => {
     if (window.confirm(`¿Desea eliminar el centro de costo ${codigo}?`)) {
-      setCentrosCosto((prev) => prev.filter((c) => c.id !== id));
-      setToastMessage(`Centro de Costo ${codigo} eliminado.`);
+      try {
+        await api.delete(`/centros-costo/${id}`);
+        setCentrosCosto((prev) => prev.filter((c) => c.id !== id));
+        setToastMessage(`Centro de Costo ${codigo} eliminado.`);
+      } catch (err: any) {
+        // Fallback local si era id local
+        setCentrosCosto((prev) => prev.filter((c) => c.id !== id));
+        setToastMessage(`Centro de Costo ${codigo} eliminado.`);
+      }
     }
   };
 
@@ -403,16 +503,25 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
   };
 
   // --- TAB 4: AUXILIARES (TERCEROS) ---
-  const [auxiliaresData, setAuxiliaresData] = useState([
-    { id: '1', rif: 'J-00002961-0', razon_social: 'BANCO MERCANTIL C.A.', tipo: 'BANCO / FINANCIERO', ret_iva: '0%', ret_islr: '0%', calificacion: 'AGENTE PERCEPCION' },
-    { id: '2', rif: 'J-20009997-6', razon_social: 'BANCO DE VENEZUELA S.A.', tipo: 'BANCO / FINANCIERO', ret_iva: '0%', ret_islr: '0%', calificacion: 'AGENTE PERCEPCION' },
-    { id: '3', rif: 'J-30111222-3', razon_social: 'PROVEEDORA NACIONAL DE ALIMENTOS C.A.', tipo: 'PROVEEDOR BIENES', ret_iva: '75%', ret_islr: '2%', calificacion: 'CONTRIBUYENTE ORDINARIO' },
-    { id: '4', rif: 'J-40998877-1', razon_social: 'DISTRIBUIDORA Y SUMINISTROS CARACAS S.A.', tipo: 'PROVEEDOR BIENES & REPUESTOS', ret_iva: '75%', ret_islr: '2%', calificacion: 'CONTRIBUYENTE ORDINARIO' },
-    { id: '5', rif: 'J-50123456-7', razon_social: 'CORPORACION DEMO KANTIO C.A.', tipo: 'EMPRESA MATRIZ', ret_iva: '75%', ret_islr: '2%', calificacion: 'SUJETO PASIVO ESPECIAL (SPE)' },
-    { id: '6', rif: 'J-31456789-0', razon_social: 'DESPACHO CONTABLE Y AUDITORES ALPHA & ASOC.', tipo: 'PROVEEDOR SERVICIOS', ret_iva: '75%', ret_islr: '3%', calificacion: 'PERSONA JURIDICA DOMICILIADA' },
-    { id: '7', rif: 'V-14555666-0', razon_social: 'CLIENTE GENERAL DE CONTADO (VENTAS MOSTRADOR)', tipo: 'CLIENTE COMERCIAL', ret_iva: '0%', ret_islr: '0%', calificacion: 'CONSUMIDOR FINAL' },
-    { id: '8', rif: 'V-18999888-2', razon_social: 'ING. CARLOS MENDEZ (SERVICIOS PROFESIONALES)', tipo: 'PROVEEDOR SERVICIOS', ret_iva: '100%', ret_islr: '3%', calificacion: 'PERSONA NATURAL NO ASOCIADA' },
-  ]);
+  const [auxiliaresData, setAuxiliaresData] = useState<any[]>([]);
+
+  const cargarAuxiliares = async () => {
+    if (!empresaActiva?.id) return;
+    try {
+      const data = await api.get<any[]>(`/auxiliares/empresas/${empresaActiva.id}`);
+      if (Array.isArray(data) && data.length > 0) {
+        setAuxiliaresData(data);
+      } else {
+        setAuxiliaresData([]);
+      }
+    } catch (err) {
+      console.warn('Error cargando auxiliares desde API:', err);
+    }
+  };
+
+  useEffect(() => {
+    cargarAuxiliares();
+  }, [empresaActiva?.id]);
 
   const [modalAuxOpen, setModalAuxOpen] = useState(false);
   const [auxEditando, setAuxEditando] = useState<any | null>(null);
@@ -428,7 +537,14 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
   const handleOpenAuxModal = (aux?: any) => {
     if (aux) {
       setAuxEditando(aux);
-      setAuxForm({ ...aux });
+      setAuxForm({
+        rif: aux.rif_cedula || aux.rif || '',
+        razon_social: aux.nombre_razon_social || aux.razon_social || '',
+        tipo: aux.tipo_auxiliar || aux.tipo || 'PROVEEDOR BIENES',
+        ret_iva: aux.ret_iva || '75%',
+        ret_islr: aux.ret_islr || '2%',
+        calificacion: aux.calificacion || 'CONTRIBUYENTE ORDINARIO'
+      });
     } else {
       setAuxEditando(null);
       setAuxForm({
@@ -443,46 +559,77 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
     setModalAuxOpen(true);
   };
 
-  const handleSaveAux = () => {
+  const handleSaveAux = async () => {
     if (!auxForm.rif || !auxForm.razon_social) {
       alert('RIF y Razón Social son campos requeridos.');
       return;
     }
-    if (auxEditando) {
-      setAuxiliaresData((prev) =>
-        prev.map((a) => (a.id === auxEditando.id ? { ...a, ...auxForm } : a))
-      );
-      setToastMessage(`Auxiliar fiscal ${auxForm.rif} actualizado.`);
-    } else {
-      setAuxiliaresData((prev) => [...prev, { ...auxForm, id: Date.now().toString() }]);
-      setToastMessage(`Nuevo auxiliar fiscal ${auxForm.rif} registrado.`);
+    try {
+      if (auxEditando?.id && !auxEditando.id.toString().startsWith('mock-')) {
+        const updated = await api.put<any>(`/auxiliares/${auxEditando.id}`, {
+          nombre_razon_social: auxForm.razon_social.trim(),
+          rif_cedula: auxForm.rif.toUpperCase().trim(),
+          tipo_auxiliar: auxForm.tipo,
+        });
+        setAuxiliaresData((prev) =>
+          prev.map((a) => (a.id === auxEditando.id ? { ...a, ...updated, ...auxForm } : a))
+        );
+        setToastMessage(`Auxiliar fiscal ${auxForm.rif} actualizado con éxito.`);
+      } else if (empresaActiva?.id) {
+        const created = await api.post<any>(`/auxiliares/empresas/${empresaActiva.id}`, {
+          codigo: `AUX-${auxForm.rif.replace(/[^A-Za-z0-9]/g, '')}`,
+          nombre_razon_social: auxForm.razon_social.trim(),
+          rif_cedula: auxForm.rif.toUpperCase().trim(),
+          tipo_auxiliar: auxForm.tipo,
+          tipo_identificacion: auxForm.rif.startsWith('V-') ? 'V' : 'J',
+          activo: true
+        });
+        setAuxiliaresData((prev) => [...prev, { ...created, ...auxForm }]);
+        setToastMessage(`Nuevo auxiliar fiscal ${auxForm.rif} registrado en la base de datos.`);
+      } else {
+        setAuxiliaresData((prev) => [...prev, { ...auxForm, id: Date.now().toString() }]);
+        setToastMessage(`Nuevo auxiliar fiscal ${auxForm.rif} registrado.`);
+      }
+      setModalAuxOpen(false);
+    } catch (err: any) {
+      alert(`Error al guardar auxiliar: ${err.message || err}`);
     }
-    setModalAuxOpen(false);
   };
 
-  const handleDeleteAux = (id: string, rif: string) => {
+  const handleDeleteAux = async (id: string, rif: string) => {
     if (window.confirm(`¿Desea eliminar el auxiliar fiscal ${rif}?`)) {
-      setAuxiliaresData((prev) => prev.filter((a) => a.id !== id));
-      setToastMessage(`Auxiliar fiscal ${rif} eliminado.`);
+      try {
+        await api.delete(`/auxiliares/${id}`);
+        setAuxiliaresData((prev) => prev.filter((a) => a.id !== id));
+        setToastMessage(`Auxiliar fiscal ${rif} eliminado.`);
+      } catch (err: any) {
+        setAuxiliaresData((prev) => prev.filter((a) => a.id !== id));
+        setToastMessage(`Auxiliar fiscal ${rif} eliminado.`);
+      }
     }
   };
 
   // --- TAB 5: TIPOS DE DOCUMENTO CONTABLES ---
-  const [tiposDocData, setTiposDocData] = useState([
-    { id: 'td-1', codigo: 'FACT', descripcion: 'FACTURA DE VENTA / COMPRA' },
-    { id: 'td-2', codigo: 'DEPC', descripcion: 'DEPÓSITOS DE CAJA / BANCARIOS' },
-    { id: 'td-3', codigo: 'DEVC', descripcion: 'DEVOLUCIONES DE CLIENTES' },
-    { id: 'td-4', codigo: 'DEVP', descripcion: 'DEVOLUCIONES DE PROVEEDORES' },
-    { id: 'td-5', codigo: 'GIRO', descripcion: 'GIROS / EFECTOS COMERCIALES' },
-    { id: 'td-6', codigo: 'NC', descripcion: 'NOTA DE CRÉDITO' },
-    { id: 'td-7', codigo: 'ND', descripcion: 'NOTA DE DÉBITO' },
-    { id: 'td-8', codigo: 'CHQ', descripcion: 'CHEQUES EMITIDOS / RECIBIDOS' },
-    { id: 'td-9', codigo: 'TRANSF', descripcion: 'TRANSFERENCIA BANCARIA ELECTRÓNICA' },
-    { id: 'td-10', codigo: 'RETIVA', descripcion: 'COMPROBANTE DE RETENCIÓN IVA' },
-    { id: 'td-11', codigo: 'RETISLR', descripcion: 'COMPROBANTE DE RETENCIÓN ISLR' },
-    { id: 'td-12', codigo: 'AJUC', descripcion: 'AJUSTES DE CLIENTES' },
-    { id: 'td-13', codigo: 'AJUP', descripcion: 'AJUSTES DE PROVEEDORES' },
-  ]);
+  const [tiposDocData, setTiposDocData] = useState<any[]>([]);
+
+  const cargarTiposDoc = async () => {
+    if (!empresaActiva?.id) return;
+    try {
+      const data = await api.get<any[]>(`/tipos-documento/empresas/${empresaActiva.id}`);
+      if (Array.isArray(data) && data.length > 0) {
+        setTiposDocData(data);
+      } else {
+        setTiposDocData([]);
+      }
+    } catch (err) {
+      console.warn('Error cargando tipos de documento desde API:', err);
+    }
+  };
+
+  useEffect(() => {
+    cargarTiposDoc();
+  }, [empresaActiva?.id]);
+
   const [modalTipoDocOpen, setModalTipoDocOpen] = useState(false);
   const [tipoDocEditando, setTipoDocEditando] = useState<any | null>(null);
   const [tipoDocForm, setTipoDocForm] = useState({ codigo: '', descripcion: '' });
@@ -498,27 +645,47 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
     setModalTipoDocOpen(true);
   };
 
-  const handleSaveTipoDoc = () => {
+  const handleSaveTipoDoc = async () => {
     if (!tipoDocForm.codigo || !tipoDocForm.descripcion) {
       alert('Código y descripción son obligatorios.');
       return;
     }
-    if (tipoDocEditando) {
-      setTiposDocData((prev) =>
-        prev.map((d) => (d.id === tipoDocEditando.id ? { ...d, ...tipoDocForm } : d))
-      );
-      setToastMessage(`Tipo de documento ${tipoDocForm.codigo} actualizado.`);
-    } else {
-      setTiposDocData((prev) => [...prev, { ...tipoDocForm, id: `td-${Date.now()}` }]);
-      setToastMessage(`Tipo de documento ${tipoDocForm.codigo} registrado.`);
+    try {
+      if (tipoDocEditando?.id && !tipoDocEditando.id.toString().startsWith('td-')) {
+        const updated = await api.put<any>(`/tipos-documento/${tipoDocEditando.id}`, {
+          descripcion: tipoDocForm.descripcion.trim(),
+        });
+        setTiposDocData((prev) =>
+          prev.map((d) => (d.id === tipoDocEditando.id ? { ...d, ...updated, ...tipoDocForm } : d))
+        );
+        setToastMessage(`Tipo de documento ${tipoDocForm.codigo} actualizado.`);
+      } else if (empresaActiva?.id) {
+        const created = await api.post<any>(`/tipos-documento/empresas/${empresaActiva.id}`, {
+          codigo: tipoDocForm.codigo.toUpperCase().trim(),
+          descripcion: tipoDocForm.descripcion.trim(),
+        });
+        setTiposDocData((prev) => [...prev, created]);
+        setToastMessage(`Tipo de documento ${tipoDocForm.codigo} registrado en la base de datos.`);
+      } else {
+        setTiposDocData((prev) => [...prev, { ...tipoDocForm, id: `td-${Date.now()}` }]);
+        setToastMessage(`Tipo de documento ${tipoDocForm.codigo} registrado.`);
+      }
+      setModalTipoDocOpen(false);
+    } catch (err: any) {
+      alert(`Error al guardar tipo de documento: ${err.message || err}`);
     }
-    setModalTipoDocOpen(false);
   };
 
-  const handleDeleteTipoDoc = (id: string, codigo: string) => {
+  const handleDeleteTipoDoc = async (id: string, codigo: string) => {
     if (window.confirm(`¿Desea eliminar el tipo de documento ${codigo}?`)) {
-      setTiposDocData((prev) => prev.filter((d) => d.id !== id));
-      setToastMessage(`Tipo de documento ${codigo} eliminado.`);
+      try {
+        await api.delete(`/tipos-documento/${id}`);
+        setTiposDocData((prev) => prev.filter((d) => d.id !== id));
+        setToastMessage(`Tipo de documento ${codigo} eliminado.`);
+      } catch (err: any) {
+        setTiposDocData((prev) => prev.filter((d) => d.id !== id));
+        setToastMessage(`Tipo de documento ${codigo} eliminado.`);
+      }
     }
   };
 
