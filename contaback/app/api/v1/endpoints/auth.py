@@ -4,9 +4,12 @@ from sqlalchemy import select
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.models.estudio import EmpresaEstudioDelegacion
-from app.schemas.usuario import LoginRequest, UsuarioCreate, UsuarioOut
+from app.schemas.usuario import (
+    LoginRequest, UsuarioCreate, UsuarioOut, UserProfileOut, UserProfileUpdate, AvatarUploadRequest
+)
 from app.schemas.token import Token
 from app.core.security import verify_password, get_password_hash, create_access_token
+from app.api.deps import get_current_user
 
 router = APIRouter()
 
@@ -133,4 +136,42 @@ async def delete_usuario(
     user.activo = False
     await db.commit()
     return {"status": "success", "message": "Usuario desactivado.", "id": usuario_id}
+
+@router.get("/me/profile", response_model=UserProfileOut)
+async def get_my_profile(
+    current_user: Usuario = Depends(get_current_user)
+):
+    return current_user
+
+@router.put("/me/profile", response_model=UserProfileOut)
+async def update_my_profile(
+    profile_in: UserProfileUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    if profile_in.nombre_completo is not None:
+        current_user.nombre_completo = profile_in.nombre_completo
+    if profile_in.telefono is not None:
+        current_user.telefono = profile_in.telefono
+    if profile_in.avatar_url is not None:
+        current_user.avatar_url = profile_in.avatar_url
+    if profile_in.new_password:
+        if not profile_in.current_password or not verify_password(profile_in.current_password, current_user.hashed_password):
+            raise HTTPException(status_code=400, detail="La contraseña actual suministrada no es correcta.")
+        current_user.hashed_password = get_password_hash(profile_in.new_password)
+
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
+@router.post("/me/avatar", response_model=UserProfileOut)
+async def upload_my_avatar(
+    avatar_in: AvatarUploadRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    current_user.avatar_url = avatar_in.avatar_data
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
 

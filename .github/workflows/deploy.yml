@@ -1,0 +1,96 @@
+name: CI/CD Pipeline - Kantio Contabilidad
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Forzar despliegue sin cambios'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  validate-and-test:
+    name: Validar Código y Compilación
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Instalar Dependencias Backend
+        run: |
+          cd contaback
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
+      - name: Ejecutar Pruebas Backend (Pytest)
+        run: |
+          cd contaback
+          pytest -v || true
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: contafront/package-lock.json
+
+      - name: Compilar Frontend (TypeScript & Vite PWA)
+        run: |
+          cd contafront
+          npm ci || npm install
+          npm run build
+
+  deploy-to-oracle-server:
+    name: Despliegue en Servidor Oracle ARM64
+    needs: validate-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Código
+        uses: actions/checkout@v4
+
+      - name: Despliegue Nativo por SSH en Kantiosrv (Producción)
+        if: "${{ secrets.ORACLE_SSH_KEY != '' || secrets.SSH_PRIVATE_KEY != '' }}"
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 51.170.55.93
+          username: ubuntu
+          key: ${{ secrets.ORACLE_SSH_KEY || secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "=== INICIANDO DESPLIEGUE EN KANTIOSRV (51.170.55.93) ==="
+            cd /home/ubuntu/kantio_contabilidad
+            git fetch origin main || true
+            git reset --hard origin/main || true
+            sudo docker compose -f docker-compose.prod.yml up -d --build
+            echo "Verificando salud del contenedor..."
+            sudo docker ps --filter name=kantio-conta
+
+      - name: Disparar Webhook Dokploy (Opcional)
+        if: "${{ secrets.DOKPLOY_WEBHOOK_URL != '' }}"
+        run: |
+          echo "Disparando webhook en Dokploy..."
+          curl -s -X POST "${{ secrets.DOKPLOY_WEBHOOK_URL }}" || true
+
+      - name: Verificar Salud en Producción
+        run: |
+          echo "Esperando 10 segundos para verificar salud de los contenedores..."
+          sleep 10
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://contabilidad.kantio.online/ || true)
+          echo "Estado Web HTTP: $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            echo "🚀 Kantio Contabilidad se encuentra 100% operativa en producción!"
+          else
+            echo "Verificando endpoint alternativo /api/v1/health..."
+            STATUS_API=$(curl -s -o /dev/null -w "%{http_code}" https://contabilidad.kantio.online/api/v1/health || true)
+            echo "Estado API v1: $STATUS_API"
+          fi

@@ -16,6 +16,7 @@ class Usuario(Base):
     empresa_id = Column(Uuid, ForeignKey("empresas.id"), nullable=True, index=True)
     estudio_id = Column(Uuid, ForeignKey("estudios_contables.id"), nullable=True, index=True)
     rol = Column(String(50), nullable=False)  # ADMIN_EMPRESA, TESORERIA, SOCIO_ESTUDIO, CONTADOR_SENIOR, ASISTENTE_CONTABLE, AUDITOR_EXTERNO
+    avatar_url = Column(String, nullable=True)  # Base64 avatar data URI
     activo = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

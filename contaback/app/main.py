@@ -22,10 +22,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from sqlalchemy import text
+
 @app.on_event("startup")
 async def startup_event():
-    # En desarrollo y producción crea las tablas si no existen
+    # Migración defensiva en caliente para prevenir error 500 (columna faltante)
     async with engine.begin() as conn:
+        await conn.execute(text("ALTER TABLE IF EXISTS usuarios ADD COLUMN IF NOT EXISTS avatar_url TEXT;"))
         await conn.run_sync(Base.metadata.create_all)
 
     # Inyectar datos semilla precargados automáticos

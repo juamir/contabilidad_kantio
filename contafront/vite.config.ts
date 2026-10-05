@@ -12,7 +12,7 @@ export default defineConfig({
         name: 'Kantio Contabilidad',
         short_name: 'KantioConta',
         description: 'Sistema Contable Bimonetario Cloud para Venezuela & Latinoamérica',
-        theme_color: '#2196f3',
+        theme_color: '#7c3aed',
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'landscape-primary',

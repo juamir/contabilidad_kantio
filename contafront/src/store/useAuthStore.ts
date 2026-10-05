@@ -4,11 +4,13 @@ interface User {
   id: string;
   email: string;
   nombre_completo: string;
+  telefono?: string;
   tipo_usuario: 'KANTIO_ADMIN' | 'EMPRESA_INTERNO' | 'ESTUDIO_MIEMBRO';
   rol: string;
+  avatar_url?: string;
 }
 
-interface Empresa {
+export interface Empresa {
   id: string;
   codigo: string;
   razon_social: string;
@@ -20,11 +22,12 @@ interface AuthState {
   user: User | null;
   empresaActiva: Empresa | null;
   setAuth: (token: string, user: User, empresaActiva?: Empresa) => void;
+  updateUser: (updatedUser: Partial<User>) => void;
   setEmpresaActiva: (empresa: Empresa) => void;
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   token: localStorage.getItem('kantio_conta_token'),
   user: JSON.parse(localStorage.getItem('kantio_conta_user') || 'null'),
   empresaActiva: JSON.parse(localStorage.getItem('kantio_conta_empresa') || 'null'),
@@ -36,6 +39,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.setItem('kantio_conta_empresa', JSON.stringify(empresaActiva));
     }
     set({ token, user, empresaActiva: empresaActiva || null });
+  },
+
+  updateUser: (updatedFields) => {
+    const currentUser = get().user;
+    if (currentUser) {
+      const newUser = { ...currentUser, ...updatedFields };
+      localStorage.setItem('kantio_conta_user', JSON.stringify(newUser));
+      set({ user: newUser });
+    }
   },
 
   setEmpresaActiva: (empresa) => {

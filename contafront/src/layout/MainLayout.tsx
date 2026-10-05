@@ -3,7 +3,7 @@ import { Box, useTheme, useMediaQuery } from '@mui/material';
 import { useLocation } from 'react-router-dom';
 import Sidebar, { DRAWER_WIDTH_OPEN, DRAWER_WIDTH_COLLAPSED } from './Sidebar';
 import Header from './Header';
-import { ContextualHelpModal } from '../components/ContextualHelpModal';
+import { OperationalHelpDrawer } from '../components/OperationalHelpDrawer';
 
 export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const theme = useTheme();
@@ -109,10 +109,10 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         {children}
       </Box>
 
-      <ContextualHelpModal
+      {/* Cajón Lateral Derecho de Ayuda Contextual (?) Universal */}
+      <OperationalHelpDrawer
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
-        {...getHelpContent()}
       />
     </Box>
   );

@@ -9,6 +9,7 @@ class UsuarioBase(BaseModel):
     telefono: Optional[str] = None
     tipo_usuario: str  # KANTIO_ADMIN, EMPRESA_INTERNO, ESTUDIO_MIEMBRO
     rol: str
+    avatar_url: Optional[str] = None
 
 class UsuarioCreate(UsuarioBase):
     password: str
@@ -22,7 +23,7 @@ class UsuarioUpdate(BaseModel):
     tipo_usuario: Optional[str] = None
     activo: Optional[bool] = None
     password: Optional[str] = None
-
+    avatar_url: Optional[str] = None
 
 class UsuarioOut(UsuarioBase):
     id: UUID
@@ -33,6 +34,30 @@ class UsuarioOut(UsuarioBase):
 
     class Config:
         from_attributes = True
+
+class UserProfileOut(BaseModel):
+    id: UUID
+    email: str
+    nombre_completo: str
+    telefono: Optional[str] = None
+    tipo_usuario: str
+    rol: str
+    avatar_url: Optional[str] = None
+    empresa_id: Optional[UUID] = None
+    estudio_id: Optional[UUID] = None
+
+    class Config:
+        from_attributes = True
+
+class UserProfileUpdate(BaseModel):
+    nombre_completo: Optional[str] = None
+    telefono: Optional[str] = None
+    avatar_url: Optional[str] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = None
+
+class AvatarUploadRequest(BaseModel):
+    avatar_data: str
 
 class LoginRequest(BaseModel):
     email: EmailStr
