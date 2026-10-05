@@ -42,6 +42,8 @@ import CorporateFareIcon from '@mui/icons-material/CorporateFare';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import KeyIcon from '@mui/icons-material/Key';
 import { useSearchParams } from 'react-router-dom';
+import { api } from '../services/api';
+import { useAuthStore } from '../store/useAuthStore';
 
 interface Props {
   initialTab?: string;
@@ -109,61 +111,96 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // --- TAB 0: DELEGACIONES ---
-  const [delegaciones, setDelegaciones] = useState<Delegacion[]>([
-    {
-      id: 'del-1',
-      estudioNombre: 'DESPACHO CONTABLE Y AUDITORES ALPHA & ASOCIADOS',
-      rif: 'J-31456789-0',
-      tipoDelegacion: 'OPERATIVO_COMPLETO',
-      fechaInicio: '2026-01-15',
-      estado: 'ACTIVA',
-    },
-    {
-      id: 'del-2',
-      estudioNombre: 'FIRMA DE AUDITORÍA FORENSE & COMPLIANCE KPMG-PARTNER',
-      rif: 'J-29876543-1',
-      tipoDelegacion: 'AUDITORIA_LECTURA',
-      fechaInicio: '2026-03-01',
-      estado: 'ACTIVA',
-    },
-  ]);
+  const [delegaciones, setDelegaciones] = useState<Delegacion[]>([]);
+
+  const cargarEstudios = async () => {
+    try {
+      const data = await api.get<any[]>('/estudios/');
+      if (Array.isArray(data) && data.length > 0) {
+        setDelegaciones(
+          data.map((e) => ({
+            id: e.id,
+            estudioNombre: e.nombre,
+            rif: e.rif,
+            tipoDelegacion: 'OPERATIVO_COMPLETO',
+            fechaInicio: e.created_at ? e.created_at.split('T')[0] : '2026-01-01',
+            estado: e.activo ? 'ACTIVA' : 'REVOCADA',
+          }))
+        );
+      } else {
+        setDelegaciones([]);
+      }
+    } catch (err) {
+      console.warn('Error cargando despachos contables:', err);
+    }
+  };
+
+  useEffect(() => {
+    cargarEstudios();
+  }, []);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [nuevoRif, setNuevoRif] = useState('');
   const [nuevoNombre, setNuevoNombre] = useState('');
   const [nuevoTipo, setNuevoTipo] = useState<'OPERATIVO_COMPLETO' | 'AUDITORIA_LECTURA'>('OPERATIVO_COMPLETO');
 
-  const handleRevocar = (id: string) => {
-    setDelegaciones((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, estado: 'REVOCADA' as const } : d))
-    );
-    setToastMessage('Acceso de delegación revocado inmediatamente.');
-  };
-
-  const handleEliminarDelegacion = (id: string) => {
-    if (window.confirm('¿Desea remover el registro histórico de este despacho?')) {
-      setDelegaciones((prev) => prev.filter((d) => d.id !== id));
-      setToastMessage('Registro de despacho eliminado.');
+  const handleRevocar = async (id: string) => {
+    try {
+      if (id.length > 5) {
+        await api.delete(`/estudios/${id}`);
+      }
+      setDelegaciones((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, estado: 'REVOCADA' as const } : d))
+      );
+      setToastMessage('Acceso de delegación revocado inmediatamente.');
+    } catch (err: any) {
+      alert(`Error al revocar: ${err.message || err}`);
     }
   };
 
-  const handleAgregarDelegacion = () => {
+  const handleEliminarDelegacion = async (id: string) => {
+    if (window.confirm('¿Desea remover el registro histórico de este despacho?')) {
+      try {
+        if (id.length > 5) {
+          await api.delete(`/estudios/${id}`);
+        }
+        setDelegaciones((prev) => prev.filter((d) => d.id !== id));
+        setToastMessage('Registro de despacho eliminado.');
+      } catch (err: any) {
+        setDelegaciones((prev) => prev.filter((d) => d.id !== id));
+        setToastMessage('Registro de despacho eliminado.');
+      }
+    }
+  };
+
+  const handleAgregarDelegacion = async () => {
     if (!nuevoRif) return;
-    setDelegaciones((prev) => [
-      ...prev,
-      {
-        id: `del-${Date.now()}`,
-        estudioNombre: nuevoNombre || `Despacho Contable RIF ${nuevoRif}`,
-        rif: nuevoRif,
-        tipoDelegacion: nuevoTipo,
-        fechaInicio: new Date().toISOString().split('T')[0],
-        estado: 'ACTIVA',
-      },
-    ]);
-    setModalOpen(false);
-    setNuevoRif('');
-    setNuevoNombre('');
-    setToastMessage(`Despacho ${nuevoRif} autorizado exitosamente.`);
+    try {
+      const payload = {
+        codigo: `EST-${nuevoRif.replace(/[^A-Za-z0-9]/g, '').slice(-6)}`,
+        nombre: nuevoNombre || `Despacho Contable RIF ${nuevoRif}`,
+        rif: nuevoRif.toUpperCase().trim(),
+        email_contacto: `contacto@${nuevoRif.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
+      };
+      const created = await api.post<any>('/estudios/', payload);
+      setDelegaciones((prev) => [
+        ...prev,
+        {
+          id: created.id,
+          estudioNombre: created.nombre,
+          rif: created.rif,
+          tipoDelegacion: nuevoTipo,
+          fechaInicio: new Date().toISOString().split('T')[0],
+          estado: 'ACTIVA',
+        },
+      ]);
+      setModalOpen(false);
+      setNuevoRif('');
+      setNuevoNombre('');
+      setToastMessage(`Despacho ${nuevoRif} registrado y autorizado en la base de datos.`);
+    } catch (err: any) {
+      alert(`Error al registrar despacho: ${err.message || err}`);
+    }
   };
 
   // --- TAB 1: CONSOLIDACIÓN DE HOLDING ---

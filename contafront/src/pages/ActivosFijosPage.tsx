@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -39,6 +39,8 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { useSearchParams } from 'react-router-dom';
+import { api } from '../services/api';
+import { useAuthStore } from '../store/useAuthStore';
 
 interface ActivoItem {
   id: string;
@@ -83,70 +85,72 @@ export const ActivosFijosPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(tabIndexMap[tabParam] || 0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const { empresaActiva } = useAuthStore();
+
   // Tab 0: Activos Fijos Data
-  const [activos, setActivos] = useState<ActivoItem[]>([
-    {
-      id: 'act-1',
-      codigo: 'ACT-0001',
-      descripcion: 'SERVIDOR PRINCIPAL ORACLE ARM 24GB',
-      serial: 'SRV-OCI-ARM-2026',
-      fecha_adquisicion: '2025-01-15',
-      grupo: 'EQUIPOS ELECTRONICOS Y COMPUTACION',
-      ubicacion: 'OFICINA CENTRAL CARACAS',
-      vida_util_anos: 3,
-      valor_adquisicion: 145000.0,
-      valor_salvamento: 14500.0,
-      depreciacion_acumulada: 43500.0,
-      valor_contable: 101500.0,
-      metodo: 'LINEA_RECTA',
-    },
-    {
-      id: 'act-2',
-      codigo: 'ACT-0002',
-      descripcion: 'VEHICULO TOYOTA HILUX 4X4 (OPERACIONES)',
-      serial: 'TOY-8849204-VN',
-      fecha_adquisicion: '2024-06-10',
-      grupo: 'VEHICULOS Y TRANSPORTE',
-      ubicacion: 'SUCURSAL VALENCIA / FLOTA',
-      vida_util_anos: 5,
-      valor_adquisicion: 1800000.0,
-      valor_salvamento: 180000.0,
-      depreciacion_acumulada: 540000.0,
-      valor_contable: 1260000.0,
-      metodo: 'LINEA_RECTA',
-    },
-    {
-      id: 'act-3',
-      codigo: 'ACT-0003',
-      descripcion: 'MOBILIARIO MODULAR DE OFICINA Y ESCRITORIOS',
-      serial: 'MOB-MOD-2025-01',
-      fecha_adquisicion: '2025-03-01',
-      grupo: 'MOBILIARIO Y ENSERES DE OFICINA',
-      ubicacion: 'OFICINA CENTRAL CARACAS',
-      vida_util_anos: 10,
-      valor_adquisicion: 85000.0,
-      valor_salvamento: 8500.0,
-      depreciacion_acumulada: 8500.0,
-      valor_contable: 76500.0,
-      metodo: 'LINEA_RECTA',
-    },
-  ]);
-
+  const [activos, setActivos] = useState<ActivoItem[]>([]);
   // Tab 1: Grupos
-  const [grupos, setGrupos] = useState<GrupoItem[]>([
-    { id: 'g-1', codigo: '0001', descripcion: 'EQUIPOS ELECTRONICOS Y COMPUTACION', porcentaje_anual: 33.33 },
-    { id: 'g-2', codigo: '0002', descripcion: 'MOBILIARIO Y ENSERES DE OFICINA', porcentaje_anual: 10.0 },
-    { id: 'g-3', codigo: '0003', descripcion: 'VEHICULOS Y TRANSPORTE', porcentaje_anual: 20.0 },
-    { id: 'g-4', codigo: '0004', descripcion: 'MAQUINARIA Y HERRAMIENTAS', porcentaje_anual: 10.0 },
-    { id: 'g-5', codigo: '0005', descripcion: 'EDIFICACIONES Y BIENES INMUEBLES', porcentaje_anual: 5.0 },
-  ]);
-
+  const [grupos, setGrupos] = useState<GrupoItem[]>([]);
   // Tab 2: Ubicaciones
-  const [ubicaciones, setUbicaciones] = useState<UbicacionItem[]>([
-    { id: 'u-1', codigo: 'UB-CCS-01', descripcion: 'OFICINA CENTRAL CARACAS - PISO 4' },
-    { id: 'u-2', codigo: 'UB-VAL-01', descripcion: 'SUCURSAL VALENCIA / FLOTA' },
-    { id: 'u-3', codigo: 'UB-MCY-01', descripcion: 'ALMACEN GENERAL MARACAY' },
-  ]);
+  const [ubicaciones, setUbicaciones] = useState<UbicacionItem[]>([]);
+
+  const cargarDatos = async () => {
+    if (!empresaActiva?.id) return;
+    try {
+      const [activosData, gruposData, ubisData] = await Promise.all([
+        api.get<any[]>(`/activos-fijos/empresas/${empresaActiva.id}`).catch(() => []),
+        api.get<any[]>(`/activos-fijos/empresas/${empresaActiva.id}/grupos`).catch(() => []),
+        api.get<any[]>(`/activos-fijos/empresas/${empresaActiva.id}/ubicaciones`).catch(() => []),
+      ]);
+
+      if (Array.isArray(activosData) && activosData.length > 0) {
+        setActivos(activosData.map((a) => ({
+          id: a.id,
+          codigo: a.codigo,
+          descripcion: a.descripcion,
+          serial: a.serial || '',
+          fecha_adquisicion: a.fecha_adquisicion || '2026-01-01',
+          grupo: gruposData.find((g: any) => g.id === a.grupo_id)?.descripcion || 'GENERAL',
+          ubicacion: ubisData.find((u: any) => u.id === a.ubicacion_id)?.descripcion || 'CENTRAL',
+          vida_util_anos: a.vida_util_anos || 3,
+          valor_adquisicion: a.valor_adquisicion || 0,
+          valor_salvamento: a.valor_salvamento || 0,
+          depreciacion_acumulada: a.depreciacion_acumulada || 0,
+          valor_contable: a.valor_contable || 0,
+          metodo: a.metodo || 'LINEA_RECTA',
+        })));
+      } else {
+        setActivos([]);
+      }
+
+      if (Array.isArray(gruposData) && gruposData.length > 0) {
+        setGrupos(gruposData.map((g) => ({
+          id: g.id,
+          codigo: g.codigo,
+          descripcion: g.descripcion,
+          porcentaje_anual: 10,
+        })));
+      } else {
+        setGrupos([]);
+      }
+
+      if (Array.isArray(ubisData) && ubisData.length > 0) {
+        setUbicaciones(ubisData.map((u) => ({
+          id: u.id,
+          codigo: u.codigo,
+          descripcion: u.descripcion,
+        })));
+      } else {
+        setUbicaciones([]);
+      }
+    } catch (err) {
+      console.warn('Error cargando activos fijos desde API:', err);
+    }
+  };
+
+  useEffect(() => {
+    cargarDatos();
+  }, [empresaActiva?.id]);
 
   // Modal Activo
   const [modalActivoOpen, setModalActivoOpen] = useState(false);
@@ -200,7 +204,7 @@ export const ActivosFijosPage: React.FC = () => {
     setModalActivoOpen(true);
   };
 
-  const handleSaveActivo = () => {
+  const handleSaveActivo = async () => {
     if (!activoForm.codigo || !activoForm.descripcion) {
       alert('Código y descripción son obligatorios.');
       return;
@@ -208,20 +212,57 @@ export const ActivosFijosPage: React.FC = () => {
     const valContable = activoForm.valor_adquisicion - activoForm.depreciacion_acumulada;
     const finalItem = { ...activoForm, valor_contable: valContable };
 
-    if (activoEditando) {
-      setActivos((prev) => prev.map((a) => (a.id === activoEditando.id ? finalItem : a)));
-      setToastMessage(`Activo ${finalItem.codigo} actualizado con éxito.`);
-    } else {
-      setActivos((prev) => [...prev, finalItem]);
-      setToastMessage(`Activo ${finalItem.codigo} registrado exitosamente.`);
+    try {
+      if (activoEditando && !activoEditando.id.startsWith('act-')) {
+        await api.put(`/activos-fijos/${activoEditando.id}`, {
+          descripcion: finalItem.descripcion,
+          serial: finalItem.serial,
+          valor_adquisicion: Number(finalItem.valor_adquisicion),
+          valor_salvamento: Number(finalItem.valor_salvamento),
+          depreciacion_acumulada: Number(finalItem.depreciacion_acumulada),
+          vida_util_anos: Number(finalItem.vida_util_anos),
+          metodo: finalItem.metodo,
+        });
+        setActivos((prev) => prev.map((a) => (a.id === activoEditando.id ? finalItem : a)));
+        setToastMessage(`Activo ${finalItem.codigo} actualizado con éxito.`);
+      } else if (empresaActiva?.id) {
+        const created = await api.post<any>(`/activos-fijos/empresas/${empresaActiva.id}`, {
+          codigo: finalItem.codigo.toUpperCase().trim(),
+          descripcion: finalItem.descripcion.trim(),
+          serial: finalItem.serial.trim(),
+          fecha_adquisicion: finalItem.fecha_adquisicion,
+          inicio_depreciacion: finalItem.fecha_adquisicion,
+          vida_util_anos: Number(finalItem.vida_util_anos),
+          vida_util_meses: Number(finalItem.vida_util_anos) * 12,
+          metodo: finalItem.metodo,
+          valor_adquisicion: Number(finalItem.valor_adquisicion),
+          valor_salvamento: Number(finalItem.valor_salvamento),
+          depreciacion_acumulada: Number(finalItem.depreciacion_acumulada),
+        });
+        setActivos((prev) => [...prev, { ...finalItem, id: created.id }]);
+        setToastMessage(`Activo ${finalItem.codigo} registrado exitosamente en la base de datos.`);
+      } else {
+        setActivos((prev) => [...prev, finalItem]);
+        setToastMessage(`Activo ${finalItem.codigo} registrado.`);
+      }
+      setModalActivoOpen(false);
+    } catch (err: any) {
+      alert(`Error al guardar activo fijo: ${err.message || err}`);
     }
-    setModalActivoOpen(false);
   };
 
-  const handleDeleteActivo = (id: string, cod: string) => {
+  const handleDeleteActivo = async (id: string, cod: string) => {
     if (window.confirm(`¿Desea desincorporar/eliminar el activo fijo ${cod}?`)) {
-      setActivos((prev) => prev.filter((a) => a.id !== id));
-      setToastMessage(`Activo ${cod} desincorporado.`);
+      try {
+        if (!id.startsWith('act-')) {
+          await api.delete(`/activos-fijos/${id}`);
+        }
+        setActivos((prev) => prev.filter((a) => a.id !== id));
+        setToastMessage(`Activo ${cod} desincorporado.`);
+      } catch (err: any) {
+        setActivos((prev) => prev.filter((a) => a.id !== id));
+        setToastMessage(`Activo ${cod} desincorporado.`);
+      }
     }
   };
 

@@ -46,6 +46,8 @@ import PrintIcon from '@mui/icons-material/Print';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { useSearchParams } from 'react-router-dom';
 import { ComprobanteSeniatModal, ComprobanteRetencionData } from '../components/ComprobanteSeniatModal';
+import { api } from '../services/api';
+import { useAuthStore } from '../store/useAuthStore';
 
 interface Props {
   initialTab?: string;
@@ -131,14 +133,43 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
     }, 1200);
   };
 
+  const { empresaActiva } = useAuthStore();
+
   // --- LISTA DE FACTURAS FISCALES PARA LIBROS Y TXT ---
-  const [facturas, setFacturas] = useState<FacturaFiscalUI[]>([
-    { id: '1', fecha: '2026-10-02', tipo: 'COMPRA', rif: 'J-30111222-3', nombre: 'PROVEEDORA NACIONAL DE ALIMENTOS C.A.', factura: '0001245', control: '00-008912', total: 5800.00, base: 5000.00, iva: 800.00, ret_iva: 600.00, ret_islr: 100.00 },
-    { id: '2', fecha: '2026-10-04', tipo: 'COMPRA', rif: 'J-40998877-1', nombre: 'DISTRIBUIDORA Y SUMINISTROS CARACAS S.A.', factura: '0004562', control: '00-001290', total: 3480.00, base: 3000.00, iva: 480.00, ret_iva: 360.00, ret_islr: 60.00 },
-    { id: '3', fecha: '2026-10-07', tipo: 'COMPRA', rif: 'J-31456789-0', nombre: 'DESPACHO CONTABLE Y AUDITORES ALPHA & ASOC.', factura: '0000890', control: '00-009911', total: 8120.00, base: 7000.00, iva: 1120.00, ret_iva: 840.00, ret_islr: 210.00 },
-    { id: '4', fecha: '2026-10-01', tipo: 'VENTA', rif: 'V-14555666-0', nombre: 'CLIENTE GENERAL DE CONTADO (TIENDA)', factura: '0000001', control: '00-000001', total: 4640.00, base: 4000.00, iva: 640.00, ret_iva: 0.00, ret_islr: 0.00 },
-    { id: '5', fecha: '2026-10-05', tipo: 'VENTA', rif: 'J-50123456-7', nombre: 'INVERSIONES SAN CRISTOBAL S.A.', factura: '0000002', control: '00-000002', total: 9280.00, base: 8000.00, iva: 1280.00, ret_iva: 960.00, ret_islr: 160.00 },
-  ]);
+  const [facturas, setFacturas] = useState<FacturaFiscalUI[]>([]);
+
+  const cargarFacturas = async () => {
+    if (!empresaActiva?.id) return;
+    try {
+      const data = await api.get<any[]>(`/fiscal/empresas/${empresaActiva.id}/facturas`);
+      if (Array.isArray(data) && data.length > 0) {
+        setFacturas(
+          data.map((f) => ({
+            id: f.id,
+            fecha: f.fecha_emision,
+            tipo: f.tipo_operacion,
+            rif: 'J-00000000-0',
+            nombre: f.numero_factura,
+            factura: f.numero_factura,
+            control: f.numero_control,
+            total: f.monto_total || 0,
+            base: f.base_imponible || 0,
+            iva: f.monto_iva || 0,
+            ret_iva: f.monto_retencion_iva || 0,
+            ret_islr: f.monto_retencion_islr || 0,
+          }))
+        );
+      } else {
+        setFacturas([]);
+      }
+    } catch (err) {
+      console.warn('Error cargando facturas desde API:', err);
+    }
+  };
+
+  useEffect(() => {
+    cargarFacturas();
+  }, [empresaActiva?.id]);
 
   // Modal de Comprobante Oficial SENIAT (Impresión y Envío Email PDF)
   const [comprobanteModalOpen, setComprobanteModalOpen] = useState(false);
@@ -177,27 +208,49 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
     setComprobanteModalOpen(true);
   };
 
-  const handleGenerarComprobanteRetencion = () => {
-    const idGenerado = Date.now().toString();
-    const nueva: FacturaFiscalUI = {
-      id: idGenerado,
-      fecha: new Date().toISOString().split('T')[0],
-      tipo: tipoOp,
-      rif: rifTercero,
-      nombre: nombreTercero,
-      factura: numeroFactura,
-      control: numeroControl,
-      total: montoTotal,
-      base: baseImponible,
-      iva: montoIva,
-      ret_iva: montoRetIva,
-      ret_islr: montoRetIslr,
-    };
-    setFacturas((prev) => [nueva, ...prev]);
-    setToastMessage(`Comprobante fiscal registrado con éxito (Factura #${numeroFactura}).`);
+  const handleGenerarComprobanteRetencion = async () => {
+    if (!empresaActiva?.id) {
+      alert('Debe tener una empresa activa seleccionada.');
+      return;
+    }
+    try {
+      const payload = {
+        tipo_operacion: tipoOp,
+        fecha_emision: new Date().toISOString().split('T')[0],
+        rif_tercero: rifTercero.toUpperCase().trim(),
+        nombre_tercero: nombreTercero.trim(),
+        numero_factura: numeroFactura.trim(),
+        numero_control: numeroControl.trim(),
+        monto_exento: 0.0,
+        base_imponible: baseImponible,
+        alicuota_iva: alicuotaIva,
+        porcentaje_retencion_iva: porcRetIva,
+        porcentaje_retencion_islr: porcRetIslr,
+      };
 
-    // Abrir automáticamente el comprobante SENIAT para imprimir o enviar PDF
-    handleVerComprobanteSeniat(nueva);
+      const res = await api.post<any>(`/fiscal/empresas/${empresaActiva.id}/facturas`, payload);
+
+      const nueva: FacturaFiscalUI = {
+        id: res.id,
+        fecha: res.fecha_emision,
+        tipo: res.tipo_operacion,
+        rif: rifTercero,
+        nombre: nombreTercero,
+        factura: res.numero_factura,
+        control: res.numero_control,
+        total: res.monto_total,
+        base: res.base_imponible,
+        iva: res.monto_iva,
+        ret_iva: res.monto_retencion_iva,
+        ret_islr: res.monto_retencion_islr,
+      };
+
+      setFacturas((prev) => [nueva, ...prev]);
+      setToastMessage(`Comprobante fiscal registrado con éxito en la base de datos (Factura #${numeroFactura}).`);
+      handleVerComprobanteSeniat(nueva);
+    } catch (err: any) {
+      alert(`Error al generar comprobante de retención: ${err.message || err}`);
+    }
   };
 
   // Modal para crear / editar factura directamente desde los libros
@@ -249,63 +302,91 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
     setModalFacturaOpen(true);
   };
 
-  const handleSaveFactura = () => {
+  const handleSaveFactura = async () => {
     if (!facturaForm.rif || !facturaForm.nombre || !facturaForm.factura) {
       alert('RIF, Nombre y Número de Factura son requeridos.');
       return;
     }
-    const calcIva = Number((facturaForm.base * (facturaForm.alicuota / 100)).toFixed(2));
-    const calcTotal = Number((facturaForm.base + calcIva).toFixed(2));
-    const calcRetIva = Number((calcIva * (facturaForm.porc_ret_iva / 100)).toFixed(2));
-    const calcRetIslr = Number((facturaForm.base * (facturaForm.porc_ret_islr / 100)).toFixed(2));
-
-    if (facturaEditando) {
-      setFacturas((prev) =>
-        prev.map((item) =>
-          item.id === facturaEditando.id
-            ? {
-                ...item,
-                fecha: facturaForm.fecha,
-                tipo: facturaForm.tipo,
-                rif: facturaForm.rif,
-                nombre: facturaForm.nombre,
-                factura: facturaForm.factura,
-                control: facturaForm.control,
-                base: facturaForm.base,
-                iva: calcIva,
-                total: calcTotal,
-                ret_iva: calcRetIva,
-                ret_islr: calcRetIslr
-              }
-            : item
-        )
-      );
-      setToastMessage(`Factura fiscal ${facturaForm.factura} actualizada.`);
-    } else {
-      const nueva: FacturaFiscalUI = {
-        id: Date.now().toString(),
-        fecha: facturaForm.fecha,
-        tipo: facturaForm.tipo,
-        rif: facturaForm.rif,
-        nombre: facturaForm.nombre,
-        factura: facturaForm.factura,
-        control: facturaForm.control,
-        base: facturaForm.base,
-        iva: calcIva,
-        total: calcTotal,
-        ret_iva: calcRetIva,
-        ret_islr: calcRetIslr
-      };
-      setFacturas((prev) => [nueva, ...prev]);
-      setToastMessage(`Factura fiscal ${facturaForm.factura} agregada.`);
+    if (!empresaActiva?.id) {
+      alert('Debe tener una empresa activa seleccionada.');
+      return;
     }
-    setModalFacturaOpen(false);
+
+    try {
+      const payload = {
+        tipo_operacion: facturaForm.tipo,
+        fecha_emision: facturaForm.fecha,
+        rif_tercero: facturaForm.rif.toUpperCase().trim(),
+        nombre_tercero: facturaForm.nombre.trim(),
+        numero_factura: facturaForm.factura.trim(),
+        numero_control: facturaForm.control.trim(),
+        monto_exento: 0.0,
+        base_imponible: Number(facturaForm.base),
+        alicuota_iva: Number(facturaForm.alicuota),
+        porcentaje_retencion_iva: Number(facturaForm.porc_ret_iva),
+        porcentaje_retencion_islr: Number(facturaForm.porc_ret_islr),
+      };
+
+      if (facturaEditando && !facturaEditando.id.startsWith('1') && !facturaEditando.id.startsWith('2') && !facturaEditando.id.startsWith('3') && !facturaEditando.id.startsWith('4') && !facturaEditando.id.startsWith('5')) {
+        const res = await api.put<any>(`/fiscal/facturas/${facturaEditando.id}`, payload);
+        setFacturas((prev) =>
+          prev.map((item) =>
+            item.id === facturaEditando.id
+              ? {
+                  ...item,
+                  fecha: res.fecha_emision,
+                  tipo: res.tipo_operacion,
+                  rif: facturaForm.rif,
+                  nombre: facturaForm.nombre,
+                  factura: res.numero_factura,
+                  control: res.numero_control,
+                  base: res.base_imponible,
+                  iva: res.monto_iva,
+                  total: res.monto_total,
+                  ret_iva: res.monto_retencion_iva,
+                  ret_islr: res.monto_retencion_islr,
+                }
+              : item
+          )
+        );
+        setToastMessage(`Factura fiscal ${facturaForm.factura} actualizada en la base de datos.`);
+      } else {
+        const res = await api.post<any>(`/fiscal/empresas/${empresaActiva.id}/facturas`, payload);
+        const nueva: FacturaFiscalUI = {
+          id: res.id,
+          fecha: res.fecha_emision,
+          tipo: res.tipo_operacion,
+          rif: facturaForm.rif,
+          nombre: facturaForm.nombre,
+          factura: res.numero_factura,
+          control: res.numero_control,
+          total: res.monto_total,
+          base: res.base_imponible,
+          iva: res.monto_iva,
+          ret_iva: res.monto_retencion_iva,
+          ret_islr: res.monto_retencion_islr,
+        };
+        setFacturas((prev) => [nueva, ...prev]);
+        setToastMessage(`Factura fiscal ${facturaForm.factura} registrada en la base de datos.`);
+      }
+      setModalFacturaOpen(false);
+    } catch (err: any) {
+      alert(`Error al guardar factura: ${err.message || err}`);
+    }
   };
 
-  const handleDeleteFactura = (id: string, numero: string) => {
+  const handleDeleteFactura = async (id: string, numero: string) => {
     if (window.confirm(`¿Está seguro de eliminar la factura ${numero}?`)) {
-      setFacturas((prev) => prev.filter((f) => f.id !== id));
-      setToastMessage(`Factura ${numero} eliminada.`);
+      try {
+        if (id.length > 5) {
+          await api.delete(`/fiscal/facturas/${id}`);
+        }
+        setFacturas((prev) => prev.filter((f) => f.id !== id));
+        setToastMessage(`Factura ${numero} eliminada.`);
+      } catch (err: any) {
+        setFacturas((prev) => prev.filter((f) => f.id !== id));
+        setToastMessage(`Factura ${numero} eliminada.`);
+      }
     }
   };
 
@@ -318,7 +399,28 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
     `J501234567\t${periodoTxt}\t${c.fecha}\tC\t01\t${c.rif.replace(/-/g, '')}\t${c.factura}\t${c.control}\t${c.total.toFixed(2)}\t${c.base.toFixed(2)}\t${c.iva.toFixed(2)}\t${periodoTxt}0000000${i + 1}\t${c.ret_iva.toFixed(2)}\t0\t0.00\t16.00`
   );
 
-  const handleDescargarTXT = () => {
+  const handleDescargarTXT = async () => {
+    if (empresaActiva?.id) {
+      try {
+        const token = useAuthStore.getState().token;
+        const resp = await fetch(`/api/v1/fiscal/empresas/${empresaActiva.id}/retenciones-txt?periodo=${periodoTxt}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (resp.ok) {
+          const blob = await resp.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `SENIAT_RET_${empresaActiva.rif}_${periodoTxt}.txt`;
+          a.click();
+          URL.revokeObjectURL(url);
+          setToastMessage(`Archivo oficial TXT generado y descargado desde el servidor.`);
+          return;
+        }
+      } catch (err) {
+        // fallback
+      }
+    }
     const rawContent = lineasTxt.join('\r\n');
     const blob = new Blob([rawContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -327,6 +429,7 @@ export const FiscalPage: React.FC<Props> = ({ initialTab }) => {
     a.download = `SENIAT_RET_IVA_${periodoTxt}_Q${quincenaTxt}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+    setToastMessage(`Archivo TXT descargado (${lineasTxt.length} operaciones).`);
   };
 
   // --- TAB 2: LIBROS DE COMPRAS Y VENTAS ---

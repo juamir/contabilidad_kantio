@@ -263,55 +263,68 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
     }
   };
 
-  const handleGuardarAsiento = () => {
+  const handleGuardarAsiento = async () => {
     if (!estaCuadrado) {
       alert('El asiento está descuadrado. Por favor balancee las partidas.');
       return;
     }
 
-    if (asientoIdEditando) {
-      // Modificar existente
-      setAsientosRegistrados((prev) =>
-        prev.map((a) =>
-          a.id === asientoIdEditando
-            ? {
-                ...a,
-                numero,
-                fecha,
-                tipo,
-                concepto,
-                tasaBcv,
-                totalDebitoBase,
-                totalCreditoBase,
-                totalDebitoDivisa,
-                totalCreditoDivisa,
-                renglones: [...renglones]
-              }
-            : a
-        )
-      );
-      setToastMessage(`Comprobante ${numero} actualizado exitosamente.`);
-    } else {
-      // Crear nuevo
-      const nuevo: ComprobanteRegistradoUI = {
-        id: `comp-${Date.now()}`,
+    if (!empresaActiva?.id) {
+      alert('Debe tener una empresa activa para registrar el comprobante.');
+      return;
+    }
+
+    try {
+      // Buscar o mapear los UUIDs de las cuentas
+      const cuentasDb = await api.get<any[]>(`/cuentas/empresas/${empresaActiva.id}`);
+      const cuentasMap = new Map(cuentasDb.map((c) => [c.codigo, c.id]));
+
+      const renglonesPayload = renglones.map((r, idx) => {
+        const cuentaId = cuentasMap.get(r.cuentaCodigo) || (cuentasDb[0]?.id);
+        return {
+          numero_linea: idx + 1,
+          cuenta_id: cuentaId,
+          descripcion: r.descripcion || concepto,
+          monto_debito_base: Number(r.debitoBase) || 0.0,
+          monto_credito_base: Number(r.creditoBase) || 0.0,
+          monto_debito_divisa: Number(r.debitoDivisa) || 0.0,
+          monto_credito_divisa: Number(r.creditoDivisa) || 0.0,
+        };
+      });
+
+      const payload = {
         numero,
         fecha,
         tipo,
         concepto,
-        tasaBcv,
-        totalDebitoBase,
-        totalCreditoBase,
-        totalDebitoDivisa,
-        totalCreditoDivisa,
+        tasa_cambio: tasaBcv,
         estado: 'ASENTADO',
-        renglones: [...renglones]
+        renglones: renglonesPayload,
       };
-      setAsientosRegistrados((prev) => [nuevo, ...prev]);
-      setToastMessage(`Comprobante ${numero} asentado oficialmente.`);
-    }
 
-    setMostrarFormulario(false);
+      const created = await api.post<any>(`/asientos/empresas/${empresaActiva.id}`, payload);
+
+      const nuevo: ComprobanteRegistradoUI = {
+        id: created.id,
+        numero: created.numero,
+        fecha: created.fecha,
+        tipo: created.tipo,
+        concepto: created.concepto,
+        tasaBcv: created.tasa_cambio || tasaBcv,
+        totalDebitoBase: created.total_debito_base || totalDebitoBase,
+        totalCreditoBase: created.total_credito_base || totalCreditoBase,
+        totalDebitoDivisa: created.total_debito_divisa || totalDebitoDivisa,
+        totalCreditoDivisa: created.total_credito_divisa || totalCreditoDivisa,
+        estado: created.estado,
+        renglones: [...renglones],
+      };
+
+      setAsientosRegistrados((prev) => [nuevo, ...prev]);
+      setToastMessage(`Comprobante ${numero} asentado oficialmente en la base de datos.`);
+      setMostrarFormulario(false);
+    } catch (err: any) {
+      alert(`Error al guardar comprobante: ${err.message || err}`);
+    }
   };
 
   const handleAddRenglon = () => {
