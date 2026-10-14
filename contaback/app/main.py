@@ -26,9 +26,28 @@ from sqlalchemy import text
 
 @app.on_event("startup")
 async def startup_event():
-    # Migración defensiva en caliente para prevenir error 500 (columna faltante)
+    # Migración defensiva en caliente para prevenir error 500 (columna faltante y nuevas tablas)
     async with engine.begin() as conn:
         await conn.execute(text("ALTER TABLE IF EXISTS usuarios ADD COLUMN IF NOT EXISTS avatar_url TEXT;"))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS cuentas_bancarias (
+                id UUID PRIMARY KEY,
+                empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+                codigo VARCHAR(20) NOT NULL,
+                banco VARCHAR(100) NOT NULL,
+                numero_cuenta VARCHAR(30) NOT NULL,
+                tipo VARCHAR(50) NOT NULL DEFAULT 'CORRIENTE VES',
+                moneda VARCHAR(10) NOT NULL DEFAULT 'VES',
+                saldo_libros_ves NUMERIC(18, 2) NOT NULL DEFAULT 0.00,
+                saldo_banco_ves NUMERIC(18, 2) NOT NULL DEFAULT 0.00,
+                saldo_usd NUMERIC(18, 2) NOT NULL DEFAULT 0.00,
+                estado_conciliacion VARCHAR(30) NOT NULL DEFAULT 'CONCILIADO',
+                cuenta_contable_id UUID REFERENCES cuentas_contables(id),
+                activo BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_cuentas_bancarias_empresa_id ON cuentas_bancarias (empresa_id);"))
         await conn.run_sync(Base.metadata.create_all)
 
     # Inyectar datos semilla precargados automáticos

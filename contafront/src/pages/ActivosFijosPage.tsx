@@ -266,11 +266,94 @@ export const ActivosFijosPage: React.FC = () => {
     }
   };
 
-  const handleCalcularDepreciacion = () => {
-    alert(
-      'Cálculo de Depreciación Mensual procesado correctamente.\nSe generó la propuesta de asiento contable para imputar a Gastos de Depreciación y Depreciación Acumulada de la Propiedad, Planta y Equipo.'
-    );
-    setToastMessage('Depreciación periódica calculada y lista para asentar.');
+  const [fechaCorte, setFechaCorte] = useState('2026-10-31');
+  const [depreciando, setDepreciando] = useState(false);
+
+  const handleCalcularDepreciacion = async () => {
+    if (!empresaActiva?.id) {
+      alert('Debe tener una empresa activa.');
+      return;
+    }
+    try {
+      setDepreciando(true);
+      const res = await api.post<any>(`/activos-fijos/empresas/${empresaActiva.id}/depreciar?fecha_corte=${fechaCorte}`);
+      setToastMessage(
+        `Depreciación calculada: ${res.total_activos} activos procesados por Bs. ${Number(res.total_depreciacion_ves || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}. Comprobante ${res.comprobante_numero || 'generado'}.`
+      );
+      await cargarDatos();
+    } catch (err: any) {
+      alert(`Error al calcular depreciación: ${err.message || err}`);
+    } finally {
+      setDepreciando(false);
+    }
+  };
+
+  const handleSaveGrupo = async () => {
+    if (!grupoForm.codigo || !grupoForm.descripcion) {
+      alert('Código y descripción son obligatorios.');
+      return;
+    }
+    if (!empresaActiva?.id) return;
+    try {
+      const created = await api.post<any>(`/activos-fijos/empresas/${empresaActiva.id}/grupos`, {
+        codigo: grupoForm.codigo.toUpperCase().trim(),
+        descripcion: grupoForm.descripcion.trim(),
+        metodo_default: 'LINEA_RECTA',
+        vida_util_anos: Math.round(100 / (Number(grupoForm.porcentaje_anual) || 10)),
+      });
+      setGrupos([...grupos, { ...grupoForm, id: created.id }]);
+      setModalGrupoOpen(false);
+      setToastMessage(`Grupo ${grupoForm.descripcion} creado y guardado en base de datos.`);
+    } catch (err: any) {
+      alert(`Error al guardar grupo: ${err.message || err}`);
+    }
+  };
+
+  const handleDeleteGrupo = async (id: string, descripcion: string) => {
+    if (window.confirm(`¿Eliminar grupo ${descripcion}?`)) {
+      try {
+        if (!id.startsWith('g-')) {
+          await api.delete(`/activos-fijos/grupos/${id}`);
+        }
+        setGrupos(grupos.filter((x) => x.id !== id));
+        setToastMessage(`Grupo ${descripcion} eliminado.`);
+      } catch (err: any) {
+        alert(`Error al eliminar grupo: ${err.message || err}`);
+      }
+    }
+  };
+
+  const handleSaveUbicacion = async () => {
+    if (!ubiForm.codigo || !ubiForm.descripcion) {
+      alert('Código y descripción son obligatorios.');
+      return;
+    }
+    if (!empresaActiva?.id) return;
+    try {
+      const created = await api.post<any>(`/activos-fijos/empresas/${empresaActiva.id}/ubicaciones`, {
+        codigo: ubiForm.codigo.toUpperCase().trim(),
+        descripcion: ubiForm.descripcion.trim(),
+      });
+      setUbicaciones([...ubicaciones, { ...ubiForm, id: created.id }]);
+      setModalUbiOpen(false);
+      setToastMessage(`Ubicación física ${ubiForm.descripcion} guardada con éxito en base de datos.`);
+    } catch (err: any) {
+      alert(`Error al guardar ubicación: ${err.message || err}`);
+    }
+  };
+
+  const handleDeleteUbicacion = async (id: string, descripcion: string) => {
+    if (window.confirm(`¿Eliminar ubicación ${descripcion}?`)) {
+      try {
+        if (!id.startsWith('u-')) {
+          await api.delete(`/activos-fijos/ubicaciones/${id}`);
+        }
+        setUbicaciones(ubicaciones.filter((x) => x.id !== id));
+        setToastMessage(`Ubicación ${descripcion} eliminada.`);
+      } catch (err: any) {
+        alert(`Error al eliminar ubicación: ${err.message || err}`);
+      }
+    }
   };
 
   return (
@@ -437,12 +520,7 @@ export const ActivosFijosPage: React.FC = () => {
                         <IconButton
                           size="small"
                           color="error"
-                          onClick={() => {
-                            if (window.confirm(`¿Eliminar grupo ${g.descripcion}?`)) {
-                              setGrupos(grupos.filter((x) => x.id !== g.id));
-                              setToastMessage('Grupo eliminado.');
-                            }
-                          }}
+                          onClick={() => handleDeleteGrupo(g.id, g.descripcion)}
                         >
                           <DeleteOutlineIcon fontSize="small" />
                         </IconButton>
@@ -500,12 +578,7 @@ export const ActivosFijosPage: React.FC = () => {
                         <IconButton
                           size="small"
                           color="error"
-                          onClick={() => {
-                            if (window.confirm(`¿Eliminar ubicación ${u.descripcion}?`)) {
-                              setUbicaciones(ubicaciones.filter((x) => x.id !== u.id));
-                              setToastMessage('Ubicación eliminada.');
-                            }
-                          }}
+                          onClick={() => handleDeleteUbicacion(u.id, u.descripcion)}
                         >
                           <DeleteOutlineIcon fontSize="small" />
                         </IconButton>
@@ -540,7 +613,15 @@ export const ActivosFijosPage: React.FC = () => {
                   </Typography>
                   <Grid container spacing={2} sx={{ mt: 1 }}>
                     <Grid item xs={12} sm={6}>
-                      <TextField fullWidth size="small" type="date" label="Fecha de Corte" defaultValue="2026-10-31" InputLabelProps={{ shrink: true }} />
+                      <TextField
+                        fullWidth
+                        size="small"
+                        type="date"
+                        label="Fecha de Corte"
+                        value={fechaCorte}
+                        onChange={(e) => setFechaCorte(e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                      />
                     </Grid>
                     <Grid item xs={12} sm={6}>
                       <FormControl fullWidth size="small">
@@ -559,11 +640,13 @@ export const ActivosFijosPage: React.FC = () => {
                     </Typography>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
                       <Typography variant="body2">Activos a Depreciar:</Typography>
-                      <Typography variant="body2" fontWeight="bold">3 bienes</Typography>
+                      <Typography variant="body2" fontWeight="bold">{activos.length} bienes</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
                       <Typography variant="body2">Gasto Mensual Estimado:</Typography>
-                      <Typography variant="subtitle1" fontWeight="bold" color="primary.dark">Bs. 34.708,33</Typography>
+                      <Typography variant="subtitle1" fontWeight="bold" color="primary.dark">
+                        Bs. {(activos.reduce((acc, a) => acc + (a.valor_adquisicion / (a.vida_util_anos * 12 || 36)), 0)).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Typography>
                     </Box>
                   </Box>
 
@@ -571,10 +654,11 @@ export const ActivosFijosPage: React.FC = () => {
                     variant="contained"
                     startIcon={<CalculateIcon />}
                     fullWidth
+                    disabled={depreciando || activos.length === 0}
                     sx={{ mt: 3 }}
                     onClick={handleCalcularDepreciacion}
                   >
-                    Ejecutar Corrida y Generar Asiento Contable
+                    {depreciando ? 'Calculando y Asentando...' : 'Ejecutar Corrida y Generar Asiento Contable'}
                   </Button>
                 </Paper>
               </Grid>
@@ -762,12 +846,7 @@ export const ActivosFijosPage: React.FC = () => {
           <Button onClick={() => setModalGrupoOpen(false)}>Cancelar</Button>
           <Button
             variant="contained"
-            onClick={() => {
-              if (!grupoForm.descripcion) return;
-              setGrupos([...grupos, grupoForm]);
-              setModalGrupoOpen(false);
-              setToastMessage('Grupo creado con éxito.');
-            }}
+            onClick={handleSaveGrupo}
           >
             Guardar Grupo
           </Button>
@@ -803,12 +882,7 @@ export const ActivosFijosPage: React.FC = () => {
           <Button onClick={() => setModalUbiOpen(false)}>Cancelar</Button>
           <Button
             variant="contained"
-            onClick={() => {
-              if (!ubiForm.descripcion) return;
-              setUbicaciones([...ubicaciones, ubiForm]);
-              setModalUbiOpen(false);
-              setToastMessage('Ubicación física creada con éxito.');
-            }}
+            onClick={handleSaveUbicacion}
           >
             Guardar Ubicación
           </Button>

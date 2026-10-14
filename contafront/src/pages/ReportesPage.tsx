@@ -16,7 +16,13 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Button
+  Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  LinearProgress,
+  Alert
 } from '@mui/material';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
@@ -24,13 +30,17 @@ import InsightsIcon from '@mui/icons-material/Insights';
 import BalanceIcon from '@mui/icons-material/Balance';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { useSearchParams } from 'react-router-dom';
+import { useAuthStore } from '../store/useAuthStore';
+import { api } from '../services/api';
 
 interface Props {
   initialTab?: string;
 }
 
 export const ReportesPage: React.FC<Props> = ({ initialTab }) => {
+  const { empresaActiva } = useAuthStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') || initialTab || 'rendimiento';
 
@@ -49,6 +59,18 @@ export const ReportesPage: React.FC<Props> = ({ initialTab }) => {
   };
 
   const [tabIndex, setTabIndex] = useState(tabIndexMap[tabParam] || 0);
+  const [loading, setLoading] = useState(false);
+  const [tasaBcv, setTasaBcv] = useState(40.0);
+
+  // Estados de datos reales
+  const [rendimientoData, setRendimientoData] = useState<any | null>(null);
+  const [balanceGeneralData, setBalanceGeneralData] = useState<any | null>(null);
+  const [comprobacionData, setComprobacionData] = useState<any | null>(null);
+
+  // Mayor analítico
+  const [cuentasDisponibles, setCuentasDisponibles] = useState<any[]>([]);
+  const [selectedCuentaId, setSelectedCuentaId] = useState<string>('');
+  const [mayorData, setMayorData] = useState<any | null>(null);
 
   useEffect(() => {
     if (tabParam && tabIndexMap[tabParam] !== undefined) {
@@ -61,53 +83,130 @@ export const ReportesPage: React.FC<Props> = ({ initialTab }) => {
     setSearchParams({ tab: indexTabMap[newValue] });
   };
 
-  // Datos de Balance de Comprobación Sumas y Saldos
-  const cuentasComprobacion = [
-    { codigo: '1.1.01.001', descripcion: 'CAJA GENERAL (VES)', debe_ves: 12500, haber_ves: 4500, saldo_deudor: 8000, saldo_acreedor: 0 },
-    { codigo: '1.1.01.004', descripcion: 'BANCO MERCANTIL C.A. (CORRIENTE VES)', debe_ves: 284500, haber_ves: 120000, saldo_deudor: 164500, saldo_acreedor: 0 },
-    { codigo: '1.1.01.008', descripcion: 'CUENTAS EN DIVISAS USD (CUSTODIA)', debe_ves: 340000, haber_ves: 0, saldo_deudor: 340000, saldo_acreedor: 0 },
-    { codigo: '1.1.03.001', descripcion: 'CUENTAS POR COBRAR CLIENTES', debe_ves: 95000, haber_ves: 35000, saldo_deudor: 60000, saldo_acreedor: 0 },
-    { codigo: '1.1.04.001', descripcion: 'CREDITO FISCAL IVA (16%)', debe_ves: 18400, haber_ves: 0, saldo_deudor: 18400, saldo_acreedor: 0 },
-    { codigo: '1.1.05.001', descripcion: 'INVENTARIO DE MERCANCIAS', debe_ves: 112000, haber_ves: 0, saldo_deudor: 112000, saldo_acreedor: 0 },
-    { codigo: '1.2.01.002', descripcion: 'EDIFICACIONES Y LOCALES', debe_ves: 450000, haber_ves: 0, saldo_deudor: 450000, saldo_acreedor: 0 },
-    { codigo: '1.2.01.005', descripcion: 'EQUIPOS DE COMPUTACION Y ERP', debe_ves: 85000, haber_ves: 0, saldo_deudor: 85000, saldo_acreedor: 0 },
-    { codigo: '1.2.02.004', descripcion: 'DEPREC. ACUM. COMPUTACION', debe_ves: 0, haber_ves: 18500, saldo_deudor: 0, saldo_acreedor: 18500 },
-    { codigo: '2.1.01.001', descripcion: 'PROVEEDORES NACIONALES (VES)', debe_ves: 45000, haber_ves: 125000, saldo_deudor: 0, saldo_acreedor: 80000 },
-    { codigo: '2.1.03.001', descripcion: 'DEBITO FISCAL IVA (16%)', debe_ves: 0, haber_ves: 24800, saldo_deudor: 0, saldo_acreedor: 24800 },
-    { codigo: '2.1.03.002', descripcion: 'RETENCIONES DE IVA POR ENTERAR (75%)', debe_ves: 0, haber_ves: 9400, saldo_deudor: 0, saldo_acreedor: 9400 },
-    { codigo: '2.1.03.004', descripcion: 'RETENCIONES DE ISLR POR ENTERAR', debe_ves: 0, haber_ves: 3200, saldo_deudor: 0, saldo_acreedor: 3200 },
-    { codigo: '3.1.01.001', descripcion: 'CAPITAL SOCIAL SUSCRITO Y PAGADO', debe_ves: 0, haber_ves: 850000, saldo_deudor: 0, saldo_acreedor: 850000 },
-    { codigo: '4.1.01.001', descripcion: 'VENTAS DE MERCANCIAS GRAVADAS', debe_ves: 0, haber_ves: 380000, saldo_deudor: 0, saldo_acreedor: 380000 },
-    { codigo: '5.1.01.001', descripcion: 'COMPRAS DE MERCANCIAS GRAVADAS', debe_ves: 165000, haber_ves: 0, saldo_deudor: 165000, saldo_acreedor: 0 },
-    { codigo: '6.1.01.001', descripcion: 'SUELDOS Y SALARIOS (ADMIN)', debe_ves: 72000, haber_ves: 0, saldo_deudor: 72000, saldo_acreedor: 0 },
-    { codigo: '6.2.01.001', descripcion: 'ALQUILER DE OFICINAS', debe_ves: 24000, haber_ves: 0, saldo_deudor: 24000, saldo_acreedor: 0 },
-  ];
+  // Cargar Tasa BCV
+  useEffect(() => {
+    const fetchTasa = async () => {
+      try {
+        const res = await api.get<any>('/monedas/tasas/actual');
+        if (res && res.tasa) setTasaBcv(Number(res.tasa));
+      } catch (e) {
+        console.warn('Error obteniendo tasa BCV:', e);
+      }
+    };
+    fetchTasa();
+  }, []);
 
-  const totalSumasDebe = cuentasComprobacion.reduce((a, b) => a + b.debe_ves, 0);
-  const totalSumasHaber = cuentasComprobacion.reduce((a, b) => a + b.haber_ves, 0);
-  const totalSaldosDeudor = cuentasComprobacion.reduce((a, b) => a + b.saldo_deudor, 0);
-  const totalSaldosAcreedor = cuentasComprobacion.reduce((a, b) => a + b.saldo_acreedor, 0);
+  // Cargar Cuentas para el Libro Mayor
+  useEffect(() => {
+    if (!empresaActiva?.id) return;
+    const fetchCuentas = async () => {
+      try {
+        const data = await api.get<any[]>(`/cuentas/empresas/${empresaActiva.id}`);
+        if (Array.isArray(data)) {
+          const movimientoCuentas = data.filter((c) => c.permite_movimiento);
+          setCuentasDisponibles(movimientoCuentas);
+          if (movimientoCuentas.length > 0 && !selectedCuentaId) {
+            setSelectedCuentaId(movimientoCuentas[0].id);
+          }
+        }
+      } catch (e) {
+        console.warn('Error cargando cuentas para mayor:', e);
+      }
+    };
+    fetchCuentas();
+  }, [empresaActiva?.id]);
+
+  // Cargar movimientos de la cuenta seleccionada
+  useEffect(() => {
+    if (!selectedCuentaId) return;
+    const fetchMayor = async () => {
+      try {
+        setLoading(true);
+        const data = await api.get<any>(`/cuentas/${selectedCuentaId}/movimientos`);
+        setMayorData(data);
+      } catch (e) {
+        console.warn('Error cargando mayor analítico:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMayor();
+  }, [selectedCuentaId]);
+
+  // Cargar datos del tab activo
+  const cargarReporteActivo = async () => {
+    if (!empresaActiva?.id) return;
+    setLoading(true);
+    try {
+      if (tabIndex === 0) {
+        const res = await api.get<any>(`/reportes/empresas/${empresaActiva.id}/estado-resultados`);
+        setRendimientoData(res);
+      } else if (tabIndex === 1) {
+        const res = await api.get<any>(`/reportes/empresas/${empresaActiva.id}/balance-general`);
+        setBalanceGeneralData(res);
+      } else if (tabIndex === 2) {
+        const res = await api.get<any>(`/reportes/empresas/${empresaActiva.id}/balance-comprobacion`);
+        setComprobacionData(res);
+      }
+    } catch (err) {
+      console.error('Error cargando reportes financieros:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarReporteActivo();
+  }, [tabIndex, empresaActiva?.id]);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExportCSV = () => {
+    if (tabIndex === 2 && comprobacionData?.cuentas) {
+      let csv = 'Codigo;Descripcion;Naturaleza;Debito_VES;Credito_VES;Saldo_Deudor;Saldo_Acreedor\n';
+      comprobacionData.cuentas.forEach((c: any) => {
+        csv += `"${c.codigo}";"${c.descripcion}";"${c.naturaleza}";${c.total_debito};${c.total_credito};${c.saldo_deudor};${c.saldo_acreedor}\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Balance_Comprobacion_${empresaActiva?.codigo || 'EMP'}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      alert('La exportación directa a hoja de cálculo para este informe ha sido generada.');
+    }
+  };
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography variant="h5" fontWeight="bold">
-            4. Estados Financieros & Balances Oficiales
+            Estados Financieros & Balances Oficiales
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Conformidad con normas VEN-NIF (FCCPV) y nueva taxonomía de presentación NIIF 18.
+            Conformidad con normas VEN-NIF (FCCPV) y taxonomía de presentación NIIF 18 ({empresaActiva?.razon_social || 'Empresa Activa'}).
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button variant="outlined" startIcon={<FileDownloadIcon />} size="small">
-            Exportar Excel
+          <Button variant="outlined" startIcon={<RefreshIcon />} size="small" onClick={cargarReporteActivo} disabled={loading}>
+            Actualizar
           </Button>
-          <Button variant="contained" startIcon={<PictureAsPdfIcon />} size="small" sx={{ bgcolor: '#2196f3' }}>
+          <Button variant="outlined" startIcon={<FileDownloadIcon />} size="small" onClick={handleExportCSV}>
+            Exportar CSV
+          </Button>
+          <Button variant="contained" startIcon={<PictureAsPdfIcon />} size="small" sx={{ bgcolor: '#2196f3' }} onClick={handlePrint}>
             Imprimir PDF Foliado
           </Button>
         </Box>
       </Box>
+
+      {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
 
       <Paper sx={{ mb: 3, borderRadius: 2 }}>
         <Tabs
@@ -130,80 +229,140 @@ export const ReportesPage: React.FC<Props> = ({ initialTab }) => {
       {/* ============================================================== */}
       {tabIndex === 0 && (
         <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
-          <CardContent sx={{ p: 4 }}>
+          <CardContent sx={{ p: { xs: 2, md: 4 } }}>
             <Box sx={{ textAlign: 'center', mb: 4 }}>
               <Typography variant="h6" fontWeight="bold">
-                CORPORACIÓN DEMO KANTIO C.A.
+                {empresaActiva?.razon_social || 'EMPRESA ACTIVA'}
               </Typography>
               <Typography variant="subtitle2" color="text.secondary">
-                RIF: J-50123456-7 | EJERCICIO FISCAL 2026
+                RIF: {empresaActiva?.rif || 'J-00000000-0'} | EJERCICIO FISCAL 2026
               </Typography>
               <Typography variant="h5" fontWeight="bold" sx={{ mt: 1, color: '#1976d2' }}>
                 ESTADO DE RENDIMIENTO FINANCIERO (NIIF 18)
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                (Expresado en Bolívares Digitales y Dólares Estadounidenses a Tasa Oficial BCV)
+                (Expresado en Bolívares Digitales y Dólares Estadounidenses a Tasa Oficial BCV: Bs. {tasaBcv.toFixed(2)})
               </Typography>
             </Box>
 
             <Divider sx={{ mb: 3 }} />
 
-            <Grid container spacing={2}>
-              <Grid item xs={8}><Typography variant="subtitle1" fontWeight="bold">CATEGORÍA OPERATIVA</Typography></Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right' }}><Typography variant="caption" fontWeight="bold">VES (Bs.)</Typography></Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right' }}><Typography variant="caption" fontWeight="bold">USD ($)</Typography></Grid>
+            {rendimientoData ? (
+              <Grid container spacing={2}>
+                <Grid item xs={8}><Typography variant="subtitle1" fontWeight="bold">CATEGORÍA OPERATIVA</Typography></Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right' }}><Typography variant="caption" fontWeight="bold">VES (Bs.)</Typography></Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right' }}><Typography variant="caption" fontWeight="bold">USD ($)</Typography></Grid>
 
-              <Grid item xs={8} sx={{ pl: 2 }}><Typography variant="body2">Ingresos por Actividades Ordinarias (Ventas Netas)</Typography></Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right' }}><Typography variant="body2" fontFamily="monospace">380.000,00</Typography></Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right' }}><Typography variant="body2" fontFamily="monospace" color="primary">9.500,00</Typography></Grid>
+                <Grid item xs={8} sx={{ pl: 2 }}><Typography variant="body2">Ingresos por Actividades Ordinarias (Ventas Netas)</Typography></Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" fontFamily="monospace">
+                    {rendimientoData.ingresos_operativos.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" fontFamily="monospace" color="primary">
+                    {(rendimientoData.ingresos_operativos / tasaBcv).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
 
-              <Grid item xs={8} sx={{ pl: 2 }}><Typography variant="body2">Costo de Ventas de Mercancías</Typography></Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right' }}><Typography variant="body2" fontFamily="monospace">-165.000,00</Typography></Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right' }}><Typography variant="body2" fontFamily="monospace" color="primary">-4.125,00</Typography></Grid>
+                <Grid item xs={8} sx={{ pl: 2 }}><Typography variant="body2">Costo de Ventas de Mercancías</Typography></Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" fontFamily="monospace">
+                    -{rendimientoData.costos_ventas.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" fontFamily="monospace" color="primary">
+                    -{(rendimientoData.costos_ventas / tasaBcv).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
 
-              <Grid item xs={8} sx={{ pl: 2, bgcolor: '#f1f5f9', py: 0.5 }}>
-                <Typography variant="subtitle2" fontWeight="bold">MARGEN BRUTO OPERATIVO</Typography>
-              </Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right', bgcolor: '#f1f5f9', py: 0.5 }}>
-                <Typography variant="subtitle2" fontWeight="bold" fontFamily="monospace">215.000,00</Typography>
-              </Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right', bgcolor: '#f1f5f9', py: 0.5 }}>
-                <Typography variant="subtitle2" fontWeight="bold" fontFamily="monospace" color="primary">5.375,00</Typography>
-              </Grid>
+                <Grid item xs={8} sx={{ pl: 2, bgcolor: '#f1f5f9', py: 0.5 }}>
+                  <Typography variant="subtitle2" fontWeight="bold">MARGEN BRUTO OPERATIVO</Typography>
+                </Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right', bgcolor: '#f1f5f9', py: 0.5 }}>
+                  <Typography variant="subtitle2" fontWeight="bold" fontFamily="monospace">
+                    {rendimientoData.margen_bruto.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right', bgcolor: '#f1f5f9', py: 0.5 }}>
+                  <Typography variant="subtitle2" fontWeight="bold" fontFamily="monospace" color="primary">
+                    {(rendimientoData.margen_bruto / tasaBcv).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
 
-              <Grid item xs={8} sx={{ pl: 2 }}><Typography variant="body2">Gastos de Administración y Personal</Typography></Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right' }}><Typography variant="body2" fontFamily="monospace">-96.000,00</Typography></Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right' }}><Typography variant="body2" fontFamily="monospace" color="primary">-2.400,00</Typography></Grid>
+                <Grid item xs={8} sx={{ pl: 2 }}><Typography variant="body2">Gastos de Administración y Personal</Typography></Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" fontFamily="monospace">
+                    -{rendimientoData.gastos_operativos.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" fontFamily="monospace" color="primary">
+                    -{(rendimientoData.gastos_operativos / tasaBcv).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
 
-              <Grid item xs={8} sx={{ pl: 2, bgcolor: '#e3f2fd', py: 1 }}>
-                <Typography variant="subtitle1" fontWeight="bold" color="primary">RESULTADO OPERATIVO (NIIF 18)</Typography>
-              </Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right', bgcolor: '#e3f2fd', py: 1 }}>
-                <Typography variant="subtitle1" fontWeight="bold" fontFamily="monospace">119.000,00</Typography>
-              </Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right', bgcolor: '#e3f2fd', py: 1 }}>
-                <Typography variant="subtitle1" fontWeight="bold" fontFamily="monospace" color="primary">2.975,00</Typography>
-              </Grid>
+                <Grid item xs={8} sx={{ pl: 2, bgcolor: '#e3f2fd', py: 1 }}>
+                  <Typography variant="subtitle1" fontWeight="bold" color="primary">RESULTADO OPERATIVO (NIIF 18)</Typography>
+                </Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right', bgcolor: '#e3f2fd', py: 1 }}>
+                  <Typography variant="subtitle1" fontWeight="bold" fontFamily="monospace">
+                    {rendimientoData.resultado_operativo.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right', bgcolor: '#e3f2fd', py: 1 }}>
+                  <Typography variant="subtitle1" fontWeight="bold" fontFamily="monospace" color="primary">
+                    {(rendimientoData.resultado_operativo / tasaBcv).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
 
-              <Grid item xs={12}><Divider sx={{ my: 1 }} /></Grid>
+                <Grid item xs={12}><Divider sx={{ my: 1 }} /></Grid>
 
-              <Grid item xs={8}><Typography variant="subtitle1" fontWeight="bold">CATEGORÍA DE FINANCIAMIENTO & DIFERENCIAL CAMBIARIO</Typography></Grid>
-              <Grid item xs={4}></Grid>
+                <Grid item xs={8}><Typography variant="subtitle1" fontWeight="bold">CATEGORÍA DE FINANCIAMIENTO & DIFERENCIAL CAMBIARIO</Typography></Grid>
+                <Grid item xs={4}></Grid>
 
-              <Grid item xs={8} sx={{ pl: 2 }}><Typography variant="body2">Ganancia Neta en Diferencial Cambiario (BCV)</Typography></Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right' }}><Typography variant="body2" fontFamily="monospace">14.200,00</Typography></Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right' }}><Typography variant="body2" fontFamily="monospace" color="primary">355,00</Typography></Grid>
+                <Grid item xs={8} sx={{ pl: 2 }}><Typography variant="body2">Otros Ingresos / Ganancia Neta Cambiaria</Typography></Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" fontFamily="monospace">
+                    {rendimientoData.otros_ingresos.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" fontFamily="monospace" color="primary">
+                    {(rendimientoData.otros_ingresos / tasaBcv).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
 
-              <Grid item xs={8} sx={{ pl: 2, bgcolor: '#e8f5e9', py: 1.5, borderRadius: 1 }}>
-                <Typography variant="h6" fontWeight="bold" color="success.main">UTILIDAD NETA INTEGRAL DEL EJERCICIO</Typography>
+                <Grid item xs={8} sx={{ pl: 2 }}><Typography variant="body2">Otros Egresos / IGTF / Gastos Bancarios</Typography></Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" fontFamily="monospace">
+                    -{rendimientoData.otros_egresos.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" fontFamily="monospace" color="primary">
+                    -{(rendimientoData.otros_egresos / tasaBcv).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
+
+                <Grid item xs={8} sx={{ pl: 2, bgcolor: '#e8f5e9', py: 1.5, borderRadius: 1 }}>
+                  <Typography variant="h6" fontWeight="bold" color="success.main">UTILIDAD NETA INTEGRAL DEL EJERCICIO</Typography>
+                </Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right', bgcolor: '#e8f5e9', py: 1.5 }}>
+                  <Typography variant="h6" fontWeight="bold" fontFamily="monospace" color="success.main">
+                    Bs. {rendimientoData.resultado_neto_ejercicio.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
+                <Grid item xs={2} sx={{ textAlign: 'right', bgcolor: '#e8f5e9', py: 1.5 }}>
+                  <Typography variant="h6" fontWeight="bold" fontFamily="monospace" color="success.main">
+                    $ {(rendimientoData.resultado_neto_ejercicio / tasaBcv).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </Grid>
               </Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right', bgcolor: '#e8f5e9', py: 1.5 }}>
-                <Typography variant="h6" fontWeight="bold" fontFamily="monospace" color="success.main">Bs. 133.200,00</Typography>
-              </Grid>
-              <Grid item xs={2} sx={{ textAlign: 'right', bgcolor: '#e8f5e9', py: 1.5 }}>
-                <Typography variant="h6" fontWeight="bold" fontFamily="monospace" color="success.main">$ 3.330,00</Typography>
-              </Grid>
-            </Grid>
+            ) : (
+              <Alert severity="info">No se encontraron movimientos contables asentados para generar el estado de resultados.</Alert>
+            )}
           </CardContent>
         </Card>
       )}
@@ -213,113 +372,114 @@ export const ReportesPage: React.FC<Props> = ({ initialTab }) => {
       {/* ============================================================== */}
       {tabIndex === 1 && (
         <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
-          <CardContent sx={{ p: 4 }}>
+          <CardContent sx={{ p: { xs: 2, md: 4 } }}>
             <Box sx={{ textAlign: 'center', mb: 4 }}>
-              <Typography variant="h6" fontWeight="bold">CORPORACIÓN DEMO KANTIO C.A.</Typography>
-              <Typography variant="subtitle2" color="text.secondary">RIF: J-50123456-7</Typography>
+              <Typography variant="h6" fontWeight="bold">{empresaActiva?.razon_social || 'EMPRESA ACTIVA'}</Typography>
+              <Typography variant="subtitle2" color="text.secondary">RIF: {empresaActiva?.rif || 'J-00000000-0'}</Typography>
               <Typography variant="h5" fontWeight="bold" sx={{ mt: 1, color: '#1976d2' }}>
                 ESTADO DE SITUACIÓN FINANCIERA (BALANCE GENERAL CLASIFICADO)
               </Typography>
-              <Typography variant="caption" color="text.secondary">Al 31 de Octubre de 2026 (Expresado en Bolívares y USD)</Typography>
+              <Typography variant="caption" color="text.secondary">Al 31 de Diciembre de 2026 (Expresado en Bolívares y USD a tasa oficial)</Typography>
             </Box>
 
-            <Grid container spacing={4}>
-              {/* Columna Izquierda: ACTIVOS */}
-              <Grid item xs={12} md={6}>
-                <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-                  <Typography variant="subtitle1" fontWeight="bold" color="primary" gutterBottom>
-                    1. ACTIVOS
-                  </Typography>
+            {balanceGeneralData ? (
+              <Grid container spacing={4}>
+                {/* Columna Izquierda: ACTIVOS */}
+                <Grid item xs={12} md={6}>
+                  <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+                    <Typography variant="subtitle1" fontWeight="bold" color="primary" gutterBottom>
+                      1. ACTIVOS
+                    </Typography>
 
-                  <Typography variant="body2" fontWeight="bold" sx={{ mt: 1 }}>Activos Corrientes:</Typography>
-                  <Box sx={{ pl: 2, my: 1, fontSize: '0.85rem' }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Efectivo y Equivalentes de Efectivo:</span>
-                      <strong>Bs. 512.500,00</strong>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Cuentas por Cobrar Comerciales:</span>
-                      <strong>Bs. 60.000,00</strong>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Créditos Fiscales (IVA & Retenciones):</span>
-                      <strong>Bs. 18.400,00</strong>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Inventario de Mercancías:</span>
-                      <strong>Bs. 112.000,00</strong>
-                    </Box>
-                  </Box>
+                    <Table size="small">
+                      <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 'bold' }}>Código</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }}>Descripción</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Monto (Bs.)</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {balanceGeneralData.detalles?.activos?.map((a: any) => (
+                          <TableRow key={a.cuenta_id} hover>
+                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.codigo}</TableCell>
+                            <TableCell sx={{ fontSize: '0.8rem' }}>{a.descripcion}</TableCell>
+                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                              Bs. {(a.saldo_deudor || a.saldo_acreedor).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
 
-                  <Divider sx={{ my: 1.5 }} />
-
-                  <Typography variant="body2" fontWeight="bold">Activos No Corrientes:</Typography>
-                  <Box sx={{ pl: 2, my: 1, fontSize: '0.85rem' }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Propiedades, Planta y Equipos (PPE):</span>
-                      <strong>Bs. 535.000,00</strong>
+                    <Box sx={{ mt: 3, p: 1.5, bgcolor: '#e3f2fd', borderRadius: 1.5, display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="subtitle1" fontWeight="bold">TOTAL ACTIVOS:</Typography>
+                      <Typography variant="subtitle1" fontWeight="bold" color="primary">
+                        Bs. {balanceGeneralData.total_activo.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                      </Typography>
                     </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Depreciación Acumulada:</span>
-                      <strong>-Bs. 18.500,00</strong>
-                    </Box>
-                  </Box>
+                  </Paper>
+                </Grid>
 
-                  <Box sx={{ mt: 3, p: 1.5, bgcolor: '#e3f2fd', borderRadius: 1.5, display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="subtitle1" fontWeight="bold">TOTAL ACTIVOS:</Typography>
-                    <Typography variant="subtitle1" fontWeight="bold" color="primary">Bs. 1.219.400,00</Typography>
-                  </Box>
-                </Paper>
+                {/* Columna Derecha: PASIVOS Y PATRIMONIO */}
+                <Grid item xs={12} md={6}>
+                  <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+                    <Typography variant="subtitle1" fontWeight="bold" color="secondary" gutterBottom>
+                      2. PASIVOS Y PATRIMONIO
+                    </Typography>
+
+                    <Typography variant="body2" fontWeight="bold" sx={{ mt: 1, mb: 0.5 }}>Pasivos Exigibles:</Typography>
+                    <Table size="small">
+                      <TableBody>
+                        {balanceGeneralData.detalles?.pasivos?.map((p: any) => (
+                          <TableRow key={p.cuenta_id} hover>
+                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{p.codigo}</TableCell>
+                            <TableCell sx={{ fontSize: '0.8rem' }}>{p.descripcion}</TableCell>
+                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                              Bs. {(p.saldo_acreedor || p.saldo_deudor).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+
+                    <Divider sx={{ my: 1.5 }} />
+
+                    <Typography variant="body2" fontWeight="bold" color="text.primary" sx={{ mb: 0.5 }}>Patrimonio Neto:</Typography>
+                    <Table size="small">
+                      <TableBody>
+                        {balanceGeneralData.detalles?.patrimonio?.map((pt: any) => (
+                          <TableRow key={pt.cuenta_id} hover>
+                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{pt.codigo}</TableCell>
+                            <TableCell sx={{ fontSize: '0.8rem' }}>{pt.descripcion}</TableCell>
+                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                              Bs. {(pt.saldo_acreedor || pt.saldo_deudor).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow sx={{ bgcolor: '#f0fdf4' }}>
+                          <TableCell colSpan={2} sx={{ fontWeight: 'bold', fontSize: '0.8rem', color: 'success.main' }}>
+                            Resultado Neto del Ejercicio (PyG)
+                          </TableCell>
+                          <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', fontSize: '0.8rem', color: 'success.main' }}>
+                            Bs. {balanceGeneralData.resultado_ejercicio.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+
+                    <Box sx={{ mt: 3, p: 1.5, bgcolor: '#ede7f6', borderRadius: 1.5, display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="subtitle1" fontWeight="bold">TOTAL PASIVO + PATRIMONIO:</Typography>
+                      <Typography variant="subtitle1" fontWeight="bold" color="secondary">
+                        Bs. {balanceGeneralData.total_pasivo_y_patrimonio.toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                      </Typography>
+                    </Box>
+                  </Paper>
+                </Grid>
               </Grid>
-
-              {/* Columna Derecha: PASIVOS Y PATRIMONIO */}
-              <Grid item xs={12} md={6}>
-                <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-                  <Typography variant="subtitle1" fontWeight="bold" color="secondary" gutterBottom>
-                    2. PASIVOS Y PATRIMONIO
-                  </Typography>
-
-                  <Typography variant="body2" fontWeight="bold" sx={{ mt: 1 }}>Pasivos Corrientes:</Typography>
-                  <Box sx={{ pl: 2, my: 1, fontSize: '0.85rem' }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Cuentas por Pagar Proveedores:</span>
-                      <strong>Bs. 80.000,00</strong>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Débito Fiscal IVA y Retenciones SENIAT:</span>
-                      <strong>Bs. 37.400,00</strong>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Obligaciones Laborales y Parafiscales:</span>
-                      <strong>Bs. 18.800,00</strong>
-                    </Box>
-                  </Box>
-
-                  <Divider sx={{ my: 1.5 }} />
-
-                  <Typography variant="body2" fontWeight="bold" color="text.primary">Patrimonio Neto:</Typography>
-                  <Box sx={{ pl: 2, my: 1, fontSize: '0.85rem' }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Capital Social Suscrito y Pagado:</span>
-                      <strong>Bs. 850.000,00</strong>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Reserva Legal:</span>
-                      <strong>Bs. 42.500,00</strong>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Utilidad Neta del Ejercicio:</span>
-                      <strong style={{ color: '#2e7d32' }}>Bs. 190.700,00</strong>
-                    </Box>
-                  </Box>
-
-                  <Box sx={{ mt: 3, p: 1.5, bgcolor: '#ede7f6', borderRadius: 1.5, display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="subtitle1" fontWeight="bold">TOTAL PASIVO + PATRIMONIO:</Typography>
-                    <Typography variant="subtitle1" fontWeight="bold" color="secondary">Bs. 1.219.400,00</Typography>
-                  </Box>
-                </Paper>
-              </Grid>
-            </Grid>
+            ) : (
+              <Alert severity="info">No se encontraron datos para generar el Balance General.</Alert>
+            )}
           </CardContent>
         </Card>
       )}
@@ -330,64 +490,76 @@ export const ReportesPage: React.FC<Props> = ({ initialTab }) => {
       {tabIndex === 2 && (
         <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
           <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, flexWrap: 'wrap', gap: 1 }}>
               <Box>
                 <Typography variant="h6" fontWeight="bold">
                   Balance de Comprobación de Sumas y Saldos
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Verificación de igualdad matemática del Libro Mayor (Partida Doble).
+                  Verificación de igualdad matemática del Libro Mayor a partir de comprobantes asentados.
                 </Typography>
               </Box>
-              <Chip label="Partida Doble Balanceada" color="success" size="small" />
+              {comprobacionData?.esta_cuadrado ? (
+                <Chip label="Partida Doble Balanceada" color="success" size="small" />
+              ) : (
+                <Chip label="Descuadre Detectado" color="error" size="small" />
+              )}
             </Box>
 
-            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e3e8ef', borderRadius: 2 }}>
-              <Table size="small">
-                <TableHead sx={{ bgcolor: '#f8fafc' }}>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Código</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Descripción de la Cuenta</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Sumas Debe</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Sumas Haber</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Saldo Deudor</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Saldo Acreedor</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {cuentasComprobacion.map((c) => (
-                    <TableRow key={c.codigo} hover>
-                      <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{c.codigo}</TableCell>
-                      <TableCell>{c.descripcion}</TableCell>
-                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>Bs. {c.debe_ves.toLocaleString('es-VE')}</TableCell>
-                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>Bs. {c.haber_ves.toLocaleString('es-VE')}</TableCell>
-                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: c.saldo_deudor ? 'bold' : 'normal' }}>
-                        {c.saldo_deudor ? `Bs. ${c.saldo_deudor.toLocaleString('es-VE')}` : '-'}
+            {comprobacionData && comprobacionData.cuentas?.length > 0 ? (
+              <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e3e8ef', borderRadius: 2 }}>
+                <Table size="small">
+                  <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Código</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Descripción de la Cuenta</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Sumas Debe</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Sumas Haber</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Saldo Deudor</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Saldo Acreedor</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {comprobacionData.cuentas.map((c: any) => (
+                      <TableRow key={c.cuenta_id} hover>
+                        <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{c.codigo}</TableCell>
+                        <TableCell>{c.descripcion}</TableCell>
+                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                          Bs. {Number(c.total_debito).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                          Bs. {Number(c.total_credito).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: c.saldo_deudor ? 'bold' : 'normal' }}>
+                          {c.saldo_deudor ? `Bs. ${Number(c.saldo_deudor).toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : '-'}
+                        </TableCell>
+                        <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: c.saldo_acreedor ? 'bold' : 'normal' }}>
+                          {c.saldo_acreedor ? `Bs. ${Number(c.saldo_acreedor).toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : '-'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {/* Fila de Totales */}
+                    <TableRow sx={{ bgcolor: '#f1f5f9' }}>
+                      <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>TOTALES GENERALES:</TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                        Bs. {Number(comprobacionData.gran_total_debito).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
                       </TableCell>
-                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: c.saldo_acreedor ? 'bold' : 'normal' }}>
-                        {c.saldo_acreedor ? `Bs. ${c.saldo_acreedor.toLocaleString('es-VE')}` : '-'}
+                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                        Bs. {Number(comprobacionData.gran_total_credito).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', color: 'primary.main' }}>
+                        Bs. {Number(comprobacionData.gran_total_saldo_deudor).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', color: 'primary.main' }}>
+                        Bs. {Number(comprobacionData.gran_total_saldo_acreedor).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
                       </TableCell>
                     </TableRow>
-                  ))}
-                  {/* Fila de Totales */}
-                  <TableRow sx={{ bgcolor: '#f1f5f9' }}>
-                    <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>TOTALES GENERALES:</TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>
-                      Bs. {totalSumasDebe.toLocaleString('es-VE')}
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>
-                      Bs. {totalSumasHaber.toLocaleString('es-VE')}
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', color: 'primary.main' }}>
-                      Bs. {totalSaldosDeudor.toLocaleString('es-VE')}
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', color: 'primary.main' }}>
-                      Bs. {totalSaldosAcreedor.toLocaleString('es-VE')}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <Alert severity="info">No hay comprobantes asentados en esta empresa para calcular el balance de comprobación.</Alert>
+            )}
           </CardContent>
         </Card>
       )}
@@ -398,64 +570,88 @@ export const ReportesPage: React.FC<Props> = ({ initialTab }) => {
       {tabIndex === 3 && (
         <Card sx={{ borderRadius: 2, boxShadow: '0 2px 14px rgba(0,0,0,0.05)' }}>
           <CardContent sx={{ p: 3 }}>
-            <Box sx={{ mb: 2.5 }}>
-              <Typography variant="h6" fontWeight="bold">
-                Libro Mayor Analítico & Fichas de Cuentas
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Historial cronológico de cargos, abonos y saldo progresivo por cuenta contable individual.
-              </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, flexWrap: 'wrap', gap: 2 }}>
+              <Box>
+                <Typography variant="h6" fontWeight="bold">
+                  Libro Mayor Analítico & Fichas de Cuentas
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Historial cronológico de cargos, abonos y saldo progresivo por cuenta contable individual.
+                </Typography>
+              </Box>
+              <Box sx={{ minWidth: 300 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Seleccione Cuenta Contable</InputLabel>
+                  <Select
+                    value={selectedCuentaId}
+                    label="Seleccione Cuenta Contable"
+                    onChange={(e) => setSelectedCuentaId(e.target.value)}
+                  >
+                    {cuentasDisponibles.map((cta) => (
+                      <MenuItem key={cta.id} value={cta.id}>
+                        {cta.codigo} - {cta.descripcion}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
             </Box>
 
-            <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: '#f8fafc', borderRadius: 2 }}>
-              <Typography variant="subtitle2" fontWeight="bold">
-                Cuenta: 1.1.01.004 - BANCO MERCANTIL C.A. (CORRIENTE VES)
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Naturaleza: DEUDORA | Moneda: VES (Bolívar Digital)
-              </Typography>
-            </Paper>
+            {mayorData ? (
+              <>
+                <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: '#f8fafc', borderRadius: 2 }}>
+                  <Typography variant="subtitle2" fontWeight="bold">
+                    Cuenta: {mayorData.codigo} - {mayorData.descripcion}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Naturaleza: {mayorData.naturaleza} | Saldo Acumulado Actual: Bs. {Number(mayorData.saldo_acumulado || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Paper>
 
-            <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e3e8ef', borderRadius: 2 }}>
-              <Table size="small">
-                <TableHead sx={{ bgcolor: '#f8fafc' }}>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Fecha</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Comprobante</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Concepto</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Debe (Cargo)</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Haber (Abono)</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Saldo Acumulado</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow hover>
-                    <TableCell sx={{ fontFamily: 'monospace' }}>2026-10-01</TableCell>
-                    <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>AS-APE-01</TableCell>
-                    <TableCell>Apertura de Ejercicio / Integración de Capital</TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>Bs. 200.000,00</TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>-</TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>Bs. 200.000,00</TableCell>
-                  </TableRow>
-                  <TableRow hover>
-                    <TableCell sx={{ fontFamily: 'monospace' }}>2026-10-02</TableCell>
-                    <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>AS-COB-01</TableCell>
-                    <TableCell>Cobro de Factura N° 0001 a Cliente Nacional</TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>Bs. 84.500,00</TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>-</TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold' }}>Bs. 284.500,00</TableCell>
-                  </TableRow>
-                  <TableRow hover>
-                    <TableCell sx={{ fontFamily: 'monospace' }}>2026-10-04</TableCell>
-                    <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>AS-PAG-01</TableCell>
-                    <TableCell>Pago a Proveedora Nacional de Alimentos C.A.</TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>-</TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>Bs. 120.000,00</TableCell>
-                    <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', color: 'primary.main' }}>Bs. 164.500,00</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </TableContainer>
+                <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e3e8ef', borderRadius: 2 }}>
+                  <Table size="small">
+                    <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 'bold' }}>Fecha</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>Comprobante</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>Concepto / Glosa</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Debe (Cargo)</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Haber (Abono)</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Saldo Acumulado</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {mayorData.movimientos?.length > 0 ? (
+                        mayorData.movimientos.map((m: any, idx: number) => (
+                          <TableRow key={idx} hover>
+                            <TableCell sx={{ fontFamily: 'monospace' }}>{m.fecha}</TableCell>
+                            <TableCell sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{m.comprobante_numero}</TableCell>
+                            <TableCell>{m.descripcion}</TableCell>
+                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                              {m.monto_debito > 0 ? `Bs. ${Number(m.monto_debito).toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : '-'}
+                            </TableCell>
+                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                              {m.monto_credito > 0 ? `Bs. ${Number(m.monto_credito).toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : '-'}
+                            </TableCell>
+                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', color: 'primary.main' }}>
+                              Bs. {Number(m.saldo_progresivo).toLocaleString('es-VE', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={6} sx={{ textAlign: 'center', py: 3, color: 'text.secondary' }}>
+                            Esta cuenta no tiene movimientos contables registrados en comprobantes asentados.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </>
+            ) : (
+              <Alert severity="info">Seleccione una cuenta contable para visualizar su libro mayor analítico.</Alert>
+            )}
           </CardContent>
         </Card>
       )}

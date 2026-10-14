@@ -204,11 +204,33 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
   };
 
   // --- TAB 1: CONSOLIDACIÓN DE HOLDING ---
-  const [empresasGrupo, setEmpresasGrupo] = useState<EmpresaGrupoUI[]>([
-    { id: '1', codigo: 'EMP-01', razon_social: 'CORPORACION DEMO KANTIO C.A. (MATRIZ)', rif: 'J-50123456-7', participacion: '100%', ingresos_ves: 'Bs. 380.000,00', activos_ves: 'Bs. 1.219.400,00', estado: 'CONSOLIDADA' },
-    { id: '2', codigo: 'EMP-02', razon_social: 'DISTRIBUIDORA DE ALIMENTOS DEL CENTRO S.A.', rif: 'J-40998877-1', participacion: '85%', ingresos_ves: 'Bs. 210.000,00', activos_ves: 'Bs. 750.000,00', estado: 'CONSOLIDADA' },
-    { id: '3', codigo: 'EMP-03', razon_social: 'LOGISTICA & TRANSPORTE VALENCIA EXPRESS C.A.', rif: 'J-30111222-3', participacion: '70%', ingresos_ves: 'Bs. 145.000,00', activos_ves: 'Bs. 480.000,00', estado: 'CONSOLIDADA' },
-  ]);
+  const [empresasGrupo, setEmpresasGrupo] = useState<EmpresaGrupoUI[]>([]);
+
+  const cargarHolding = async () => {
+    try {
+      const data = await api.get<any[]>('/empresas/grupos/todos');
+      if (Array.isArray(data) && data.length > 0) {
+        setEmpresasGrupo(
+          data.map((g) => ({
+            id: g.id,
+            codigo: g.codigo || 'GRP',
+            razon_social: g.nombre,
+            rif: g.descripcion || 'J-00000000-0',
+            participacion: '100%',
+            ingresos_ves: 'Bs. 0,00',
+            activos_ves: 'Bs. 0,00',
+            estado: 'CONSOLIDADA',
+          }))
+        );
+      } else {
+        setEmpresasGrupo([
+          { id: 'grp-demo-1', codigo: 'EMP-01', razon_social: 'CORPORACION DEMO KANTIO C.A. (MATRIZ)', rif: 'J-50123456-7', participacion: '100%', ingresos_ves: 'Bs. 380.000,00', activos_ves: 'Bs. 1.219.400,00', estado: 'CONSOLIDADA' },
+        ]);
+      }
+    } catch (err) {
+      console.warn('Error cargando grupos holding:', err);
+    }
+  };
 
   const [modalHoldingOpen, setModalHoldingOpen] = useState(false);
   const [holdingEditando, setHoldingEditando] = useState<EmpresaGrupoUI | null>(null);
@@ -241,38 +263,83 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
     setModalHoldingOpen(true);
   };
 
-  const handleSaveHolding = () => {
+  const handleSaveHolding = async () => {
     if (!holdingForm.razon_social || !holdingForm.rif) {
       alert('Razón Social y RIF son obligatorios.');
       return;
     }
-    if (holdingEditando) {
-      setEmpresasGrupo((prev) =>
-        prev.map((e) => (e.id === holdingEditando.id ? { ...e, ...holdingForm } : e))
-      );
-      setToastMessage(`Empresa ${holdingForm.razon_social} actualizada en Holding.`);
-    } else {
-      setEmpresasGrupo((prev) => [...prev, { ...holdingForm, id: Date.now().toString() }]);
-      setToastMessage(`Empresa filial ${holdingForm.razon_social} incorporada al grupo.`);
+    try {
+      if (holdingEditando && !holdingEditando.id.startsWith('grp-')) {
+        await api.put(`/empresas/grupos/${holdingEditando.id}`, {
+          codigo: holdingForm.codigo.toUpperCase().trim(),
+          nombre: holdingForm.razon_social.trim(),
+          descripcion: holdingForm.rif.trim(),
+        });
+        setEmpresasGrupo((prev) =>
+          prev.map((e) => (e.id === holdingEditando.id ? { ...e, ...holdingForm } : e))
+        );
+        setToastMessage(`Empresa ${holdingForm.razon_social} actualizada en Holding.`);
+      } else {
+        const created = await api.post<any>('/empresas/grupos/', {
+          codigo: holdingForm.codigo.toUpperCase().trim(),
+          nombre: holdingForm.razon_social.trim(),
+          descripcion: holdingForm.rif.trim(),
+        });
+        setEmpresasGrupo((prev) => [...prev, { ...holdingForm, id: created.id }]);
+        setToastMessage(`Empresa filial ${holdingForm.razon_social} incorporada al grupo.`);
+      }
+      setModalHoldingOpen(false);
+    } catch (err: any) {
+      alert(`Error al guardar grupo holding: ${err.message || err}`);
     }
-    setModalHoldingOpen(false);
   };
 
-  const handleDeleteHolding = (id: string, razon: string) => {
+  const handleDeleteHolding = async (id: string, razon: string) => {
     if (window.confirm(`¿Remover a ${razon} de la consolidación del grupo holding?`)) {
-      setEmpresasGrupo((prev) => prev.filter((e) => e.id !== id));
-      setToastMessage(`Empresa ${razon} removida.`);
+      try {
+        if (!id.startsWith('grp-')) {
+          await api.delete(`/empresas/grupos/${id}`);
+        }
+        setEmpresasGrupo((prev) => prev.filter((e) => e.id !== id));
+        setToastMessage(`Empresa ${razon} removida.`);
+      } catch (err: any) {
+        alert(`Error al eliminar grupo holding: ${err.message || err}`);
+      }
     }
   };
 
   // --- TAB 2: USUARIOS Y PERMISOS RBAC ---
-  const [usuariosRbac, setUsuariosRbac] = useState<UsuarioRbacUI[]>([
-    { id: '1', email: 'superadmin@kantio.online', nombre: 'Super Administrador Kantio', rol: 'SUPERADMIN PLATAFORMA', entidad: 'Kantio Core Global', permisos: 'Acceso Total Multi-inquilino', estado: 'ACTIVO' },
-    { id: '2', email: 'admin.demo@kantio.online', nombre: 'Gerente General Demo', rol: 'ADMIN EMPRESA', entidad: 'Corporación Demo Kantio C.A.', permisos: 'Gobierno, Cierres, Revocación en 1 Clic', estado: 'ACTIVO' },
-    { id: '3', email: 'contador.alpha@kantio.online', nombre: 'Lic. Carlos Méndez (Contador Senior)', rol: 'CONTADOR SENIOR', entidad: 'Despacho Alpha & Asoc.', permisos: 'Aprobación Asientos, Libros Fiscales SENIAT', estado: 'ACTIVO' },
-    { id: '4', email: 'asistente.alpha@kantio.online', nombre: 'T.S.U. María Pérez (Asistente Carga)', rol: 'ASISTENTE CONTABLE', entidad: 'Despacho Alpha & Asoc.', permisos: 'Carga Facturas OCR, Borradores de Asientos', estado: 'ACTIVO' },
-    { id: '5', email: 'auditor.externo@kantio.online', nombre: 'Dr. Fernando Ruiz (Auditor)', rol: 'AUDITOR FORENSE', entidad: 'Auditoría Externa', permisos: 'Solo Lectura, Trazabilidad, Pistas de Auditoría', estado: 'ACTIVO' },
-  ]);
+  const [usuariosRbac, setUsuariosRbac] = useState<UsuarioRbacUI[]>([]);
+
+  const cargarUsuarios = async () => {
+    try {
+      const data = await api.get<any[]>('/auth/usuarios');
+      if (Array.isArray(data) && data.length > 0) {
+        setUsuariosRbac(
+          data.map((u) => ({
+            id: u.id,
+            email: u.email,
+            nombre: u.nombre,
+            rol: u.rol || 'ASISTENTE CONTABLE',
+            entidad: 'Corporación Demo Kantio C.A.',
+            permisos: u.rol === 'SUPERADMIN' ? 'Acceso Total Multi-inquilino' : 'Operación y Auditoría',
+            estado: u.activo ? 'ACTIVO' : 'INACTIVO',
+          }))
+        );
+      } else {
+        setUsuariosRbac([
+          { id: '1', email: 'admin@kantio.online', nombre: 'Administrador General', rol: 'ADMIN EMPRESA', entidad: 'Corporación Demo Kantio C.A.', permisos: 'Gobierno, Cierres, Revocación en 1 Clic', estado: 'ACTIVO' },
+        ]);
+      }
+    } catch (err) {
+      console.warn('Error cargando usuarios RBAC:', err);
+    }
+  };
+
+  useEffect(() => {
+    cargarHolding();
+    cargarUsuarios();
+  }, []);
 
   const [modalUsuarioOpen, setModalUsuarioOpen] = useState(false);
   const [usuarioEditando, setUsuarioEditando] = useState<UsuarioRbacUI | null>(null);
@@ -303,27 +370,51 @@ export const EstudiosPage: React.FC<Props> = ({ initialTab }) => {
     setModalUsuarioOpen(true);
   };
 
-  const handleSaveUsuario = () => {
+  const handleSaveUsuario = async () => {
     if (!usuarioForm.email || !usuarioForm.nombre) {
       alert('Email y Nombre Completo son requeridos.');
       return;
     }
-    if (usuarioEditando) {
-      setUsuariosRbac((prev) =>
-        prev.map((u) => (u.id === usuarioEditando.id ? { ...u, ...usuarioForm } : u))
-      );
-      setToastMessage(`Usuario ${usuarioForm.email} actualizado.`);
-    } else {
-      setUsuariosRbac((prev) => [...prev, { ...usuarioForm, id: Date.now().toString() }]);
-      setToastMessage(`Usuario ${usuarioForm.email} registrado en el sistema RBAC.`);
+    try {
+      if (usuarioEditando && !usuarioEditando.id.startsWith('usr-') && usuarioEditando.id.length > 10) {
+        await api.put(`/auth/usuarios/${usuarioEditando.id}`, {
+          nombre: usuarioForm.nombre.trim(),
+          email: usuarioForm.email.toLowerCase().trim(),
+          rol: usuarioForm.rol,
+          activo: usuarioForm.estado === 'ACTIVO',
+        });
+        setUsuariosRbac((prev) =>
+          prev.map((u) => (u.id === usuarioEditando.id ? { ...u, ...usuarioForm } : u))
+        );
+        setToastMessage(`Usuario ${usuarioForm.email} actualizado en base de datos.`);
+      } else {
+        const created = await api.post<any>('/auth/usuarios', {
+          nombre: usuarioForm.nombre.trim(),
+          email: usuarioForm.email.toLowerCase().trim(),
+          password: 'Password123*',
+          rol: usuarioForm.rol,
+          activo: usuarioForm.estado === 'ACTIVO',
+        });
+        setUsuariosRbac((prev) => [...prev, { ...usuarioForm, id: created.id }]);
+        setToastMessage(`Usuario ${usuarioForm.email} registrado en el sistema RBAC.`);
+      }
+      setModalUsuarioOpen(false);
+    } catch (err: any) {
+      alert(`Error al guardar usuario: ${err.message || err}`);
     }
-    setModalUsuarioOpen(false);
   };
 
-  const handleDeleteUsuario = (id: string, email: string) => {
+  const handleDeleteUsuario = async (id: string, email: string) => {
     if (window.confirm(`¿Desea desactivar / eliminar al usuario ${email}?`)) {
-      setUsuariosRbac((prev) => prev.filter((u) => u.id !== id));
-      setToastMessage(`Usuario ${email} desactivado.`);
+      try {
+        if (id.length > 10) {
+          await api.delete(`/auth/usuarios/${id}`);
+        }
+        setUsuariosRbac((prev) => prev.filter((u) => u.id !== id));
+        setToastMessage(`Usuario ${email} desactivado.`);
+      } catch (err: any) {
+        alert(`Error al eliminar usuario: ${err.message || err}`);
+      }
     }
   };
 

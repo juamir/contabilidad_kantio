@@ -420,32 +420,78 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
   const [modalTasaOpen, setModalTasaOpen] = useState(false);
   const [nuevaTasaInput, setNuevaTasaInput] = useState('40.00');
 
-  const [monedasRegistradas, setMonedasRegistradas] = useState([
-    { id: '1', codigo: 'VES', nombre: 'Bolívar Digital', simbolo: 'Bs.', es_nacional: true, tasa_frente_usd: 40.0, estado: 'OFICIAL' },
-    { id: '2', codigo: 'USD', nombre: 'Dólar Estadounidense', simbolo: '$', es_nacional: false, tasa_frente_usd: 1.0, estado: 'REFERENCIAL' },
-    { id: '3', codigo: 'EUR', nombre: 'Euro', simbolo: '€', es_nacional: false, tasa_frente_usd: 1.08, estado: 'REFERENCIAL' },
-    { id: '4', codigo: 'USDT', nombre: 'Tether Crypto Stablecoin', simbolo: 'USDT', es_nacional: false, tasa_frente_usd: 1.0, estado: 'OPERATIVO' },
-  ]);
+  const [monedasRegistradas, setMonedasRegistradas] = useState<any[]>([]);
 
-  const handleActualizarTasa = () => {
+  const cargarMonedas = async () => {
+    try {
+      const data = await api.get<any[]>('/monedas/');
+      const tasaAct = await api.get<any>('/monedas/tasas/actual');
+      const rate = Number(tasaAct?.tasa) || 40.0;
+      setTasaBcvHoy(rate);
+      setNuevaTasaInput(rate.toFixed(2));
+      if (Array.isArray(data) && data.length > 0) {
+        setMonedasRegistradas(data.map((m) => ({
+          id: m.id,
+          codigo: m.codigo,
+          nombre: m.nombre,
+          simbolo: m.simbolo,
+          es_nacional: m.es_moneda_nacional,
+          tasa_frente_usd: m.codigo === 'VES' ? rate : 1.0,
+          estado: m.es_moneda_nacional ? 'OFICIAL' : 'REFERENCIAL'
+        })));
+      } else {
+        setMonedasRegistradas([
+          { id: '1', codigo: 'VES', nombre: 'Bolívar Digital', simbolo: 'Bs.', es_nacional: true, tasa_frente_usd: rate, estado: 'OFICIAL' },
+          { id: '2', codigo: 'USD', nombre: 'Dólar Estadounidense', simbolo: '$', es_nacional: false, tasa_frente_usd: 1.0, estado: 'REFERENCIAL' },
+          { id: '3', codigo: 'EUR', nombre: 'Euro', simbolo: '€', es_nacional: false, tasa_frente_usd: 1.08, estado: 'REFERENCIAL' },
+          { id: '4', codigo: 'USDT', nombre: 'Tether Stablecoin', simbolo: 'USDT', es_nacional: false, tasa_frente_usd: 1.0, estado: 'OPERATIVO' },
+        ]);
+      }
+    } catch (err) {
+      console.warn('Error cargando monedas desde API:', err);
+    }
+  };
+
+  useEffect(() => {
+    cargarMonedas();
+  }, []);
+
+  const handleActualizarTasa = async () => {
     const val = parseFloat(nuevaTasaInput);
     if (!val || val <= 0) return;
-    setTasaBcvHoy(val);
-    setMonedasRegistradas((prev) =>
-      prev.map((m) => (m.codigo === 'VES' ? { ...m, tasa_frente_usd: val } : m))
-    );
-    setModalTasaOpen(false);
-    setToastMessage(`Tasa oficial BCV actualizada a Bs. ${val.toFixed(2)} por USD.`);
+    try {
+      await api.post('/monedas/tasas', {
+        tasa: val,
+        fecha: new Date().toISOString().split('T')[0],
+        tipo_tasa: 'BCV_OFICIAL',
+        fuente: 'BCV'
+      });
+      await cargarMonedas();
+      setModalTasaOpen(false);
+      setToastMessage(`Tasa oficial BCV actualizada en base de datos a Bs. ${val.toFixed(2)} por USD.`);
+    } catch (err: any) {
+      alert(`Error al guardar tasa oficial BCV: ${err.message || err}`);
+    }
   };
 
   // --- TAB 3: BANCOS Y TESORERÍA ---
-  const [bancosData, setBancosData] = useState([
-    { id: '1', codigo: 'BAN-001', banco: 'BANCO MERCANTIL C.A.', numero_cuenta: '0105-0024-81-1024567890', tipo: 'CORRIENTE VES', saldo_libros_ves: 284500.50, saldo_banco_ves: 284500.50, estado_conciliacion: 'CONCILIADO', saldo_usd: 0 },
-    { id: '2', codigo: 'BAN-002', banco: 'BANCO DE VENEZUELA S.A.', numero_cuenta: '0102-0111-42-0001234567', tipo: 'CORRIENTE VES (PAGO SENIAT)', saldo_libros_ves: 142300.00, saldo_banco_ves: 142300.00, estado_conciliacion: 'CONCILIADO', saldo_usd: 0 },
-    { id: '3', codigo: 'BAN-003', banco: 'BANESCO BANCO UNIVERSAL', numero_cuenta: '0134-0865-19-8650012345', tipo: 'CORRIENTE VES', saldo_libros_ves: 89600.00, saldo_banco_ves: 89600.00, estado_conciliacion: 'CONCILIADO', saldo_usd: 0 },
-    { id: '4', codigo: 'BAN-004', banco: 'BBVA BANCO PROVINCIAL', numero_cuenta: '0108-0012-33-0100456789', tipo: 'CORRIENTE VES', saldo_libros_ves: 65120.80, saldo_banco_ves: 65120.80, estado_conciliacion: 'CONCILIADO', saldo_usd: 0 },
-    { id: '5', codigo: 'BAN-005', banco: 'BANCAMIGA / MERCANTIL DIVISAS', numero_cuenta: '0105-0999-01-9999123456', tipo: 'CUSTODIA ESPECIAL USD', saldo_libros_ves: 340000.00, saldo_banco_ves: 340000.00, estado_conciliacion: 'CONCILIADO', saldo_usd: 8500.00 },
-  ]);
+  const [bancosData, setBancosData] = useState<any[]>([]);
+
+  const cargarBancos = async () => {
+    if (!empresaActiva?.id) return;
+    try {
+      const data = await api.get<any[]>(`/bancos/empresas/${empresaActiva.id}`);
+      if (Array.isArray(data)) {
+        setBancosData(data);
+      }
+    } catch (err) {
+      console.warn('Error cargando bancos desde API:', err);
+    }
+  };
+
+  useEffect(() => {
+    cargarBancos();
+  }, [empresaActiva?.id]);
 
   const [modalBancoOpen, setModalBancoOpen] = useState(false);
   const [bancoEditando, setBancoEditando] = useState<any | null>(null);
@@ -462,7 +508,15 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
   const handleOpenBancoModal = (b?: any) => {
     if (b) {
       setBancoEditando(b);
-      setBancoForm({ ...b });
+      setBancoForm({
+        codigo: b.codigo,
+        banco: b.banco,
+        numero_cuenta: b.numero_cuenta,
+        tipo: b.tipo,
+        saldo_libros_ves: b.saldo_libros_ves,
+        saldo_usd: b.saldo_usd,
+        estado_conciliacion: b.estado_conciliacion || 'CONCILIADO'
+      });
     } else {
       setBancoEditando(null);
       setBancoForm({
@@ -478,27 +532,48 @@ export const CuentasPage: React.FC<Props> = ({ initialTab }) => {
     setModalBancoOpen(true);
   };
 
-  const handleSaveBanco = () => {
+  const handleSaveBanco = async () => {
     if (!bancoForm.banco || !bancoForm.numero_cuenta) {
       alert('Entidad bancaria y número de cuenta son obligatorios.');
       return;
     }
-    if (bancoEditando) {
-      setBancosData((prev) =>
-        prev.map((b) => (b.id === bancoEditando.id ? { ...b, ...bancoForm } : b))
-      );
-      setToastMessage(`Cuenta bancaria ${bancoForm.codigo} actualizada.`);
-    } else {
-      setBancosData((prev) => [...prev, { ...bancoForm, id: Date.now().toString(), saldo_banco_ves: bancoForm.saldo_libros_ves }]);
-      setToastMessage(`Cuenta bancaria ${bancoForm.codigo} registrada.`);
+    if (!empresaActiva?.id) return;
+    try {
+      const payload = {
+        codigo: bancoForm.codigo.toUpperCase().trim(),
+        banco: bancoForm.banco.trim(),
+        numero_cuenta: bancoForm.numero_cuenta.trim(),
+        tipo: bancoForm.tipo,
+        moneda: bancoForm.tipo.includes('USD') ? 'USD' : 'VES',
+        saldo_libros_ves: Number(bancoForm.saldo_libros_ves) || 0,
+        saldo_banco_ves: Number(bancoForm.saldo_libros_ves) || 0,
+        saldo_usd: Number(bancoForm.saldo_usd) || 0,
+        estado_conciliacion: bancoForm.estado_conciliacion
+      };
+
+      if (bancoEditando) {
+        await api.put(`/bancos/${bancoEditando.id}`, payload);
+        setToastMessage(`Cuenta bancaria ${bancoForm.codigo} actualizada con éxito en la base de datos.`);
+      } else {
+        await api.post(`/bancos/empresas/${empresaActiva.id}`, payload);
+        setToastMessage(`Cuenta bancaria ${bancoForm.codigo} registrada con éxito en la base de datos.`);
+      }
+      await cargarBancos();
+      setModalBancoOpen(false);
+    } catch (err: any) {
+      alert(`Error al guardar cuenta bancaria: ${err.message || err}`);
     }
-    setModalBancoOpen(false);
   };
 
-  const handleDeleteBanco = (id: string, codigo: string) => {
+  const handleDeleteBanco = async (id: string, codigo: string) => {
     if (window.confirm(`¿Eliminar la cuenta de tesorería ${codigo}?`)) {
-      setBancosData((prev) => prev.filter((b) => b.id !== id));
-      setToastMessage(`Cuenta bancaria ${codigo} eliminada.`);
+      try {
+        await api.delete(`/bancos/${id}`);
+        await cargarBancos();
+        setToastMessage(`Cuenta bancaria ${codigo} eliminada.`);
+      } catch (err: any) {
+        alert(`Error al eliminar cuenta bancaria: ${err.message || err}`);
+      }
     }
   };
 

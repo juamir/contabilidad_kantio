@@ -4,6 +4,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from app.db.session import get_db
 from app.models.fiscal import FacturaFiscal, ComprobanteRetencionIva
 from app.models.empresa import Empresa
@@ -36,11 +37,17 @@ class FacturaFiscalOut(BaseModel):
     fecha_emision: date
     numero_factura: str
     numero_control: str
+    monto_exento: float = 0.0
     base_imponible: float
+    alicuota_iva: float = 16.0
     monto_iva: float
     monto_total: float
+    porcentaje_retencion_iva: float = 75.0
     monto_retencion_iva: float
+    porcentaje_retencion_islr: float = 0.0
     monto_retencion_islr: float
+    rif_tercero: Optional[str] = None
+    nombre_tercero: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -138,7 +145,25 @@ async def registrar_factura_fiscal(
 
     await db.commit()
     await db.refresh(factura)
-    return factura
+    return FacturaFiscalOut(
+        id=factura.id,
+        empresa_id=factura.empresa_id,
+        tipo_operacion=factura.tipo_operacion,
+        fecha_emision=factura.fecha_emision,
+        numero_factura=factura.numero_factura,
+        numero_control=factura.numero_control,
+        monto_exento=float(factura.monto_exento),
+        base_imponible=float(factura.base_imponible),
+        alicuota_iva=float(factura.alicuota_iva),
+        monto_iva=float(factura.monto_iva),
+        monto_total=float(factura.monto_total),
+        porcentaje_retencion_iva=float(factura.porcentaje_retencion_iva),
+        monto_retencion_iva=float(factura.monto_retencion_iva),
+        porcentaje_retencion_islr=float(factura.porcentaje_retencion_islr),
+        monto_retencion_islr=float(factura.monto_retencion_islr),
+        rif_tercero=aux.rif_cedula,
+        nombre_tercero=aux.nombre_razon_social
+    )
 
 @router.get("/empresas/{empresa_id}/facturas", response_model=List[FacturaFiscalOut])
 async def list_facturas_fiscales(
@@ -147,12 +172,39 @@ async def list_facturas_fiscales(
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user)
 ):
-    stmt = select(FacturaFiscal).where(FacturaFiscal.empresa_id == empresa_id)
+    stmt = (
+        select(FacturaFiscal)
+        .options(selectinload(FacturaFiscal.auxiliar))
+        .where(FacturaFiscal.empresa_id == empresa_id)
+    )
     if tipo:
         stmt = stmt.where(FacturaFiscal.tipo_operacion == tipo)
     stmt = stmt.order_by(FacturaFiscal.fecha_emision.desc(), FacturaFiscal.created_at.desc())
     result = await db.execute(stmt)
-    return result.scalars().all()
+    facturas = result.scalars().all()
+
+    out = []
+    for f in facturas:
+        out.append(FacturaFiscalOut(
+            id=f.id,
+            empresa_id=f.empresa_id,
+            tipo_operacion=f.tipo_operacion,
+            fecha_emision=f.fecha_emision,
+            numero_factura=f.numero_factura,
+            numero_control=f.numero_control,
+            monto_exento=float(f.monto_exento or 0.0),
+            base_imponible=float(f.base_imponible),
+            alicuota_iva=float(f.alicuota_iva or 16.0),
+            monto_iva=float(f.monto_iva),
+            monto_total=float(f.monto_total),
+            porcentaje_retencion_iva=float(f.porcentaje_retencion_iva or 75.0),
+            monto_retencion_iva=float(f.monto_retencion_iva or 0.0),
+            porcentaje_retencion_islr=float(f.porcentaje_retencion_islr or 0.0),
+            monto_retencion_islr=float(f.monto_retencion_islr or 0.0),
+            rif_tercero=f.auxiliar.rif_cedula if f.auxiliar else "J-00000000-0",
+            nombre_tercero=f.auxiliar.nombre_razon_social if f.auxiliar else "PROVEEDOR / CLIENTE"
+        ))
+    return out
 
 @router.put("/facturas/{factura_id}", response_model=FacturaFiscalOut)
 async def update_factura_fiscal(

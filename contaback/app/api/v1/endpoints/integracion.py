@@ -175,3 +175,39 @@ async def contabilizar_ventas_pos(
         "numero": comp.numero,
         "mensaje": "Ventas POS contabilizadas exitosamente con IVA desglosado."
     }
+
+@router.get("/empresas/{empresa_id}/historial")
+async def list_historial_integraciones(
+    empresa_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """
+    Retorna el historial de sincronizaciones contables generadas por Nómina y Punto de Venta.
+    """
+    stmt = (
+        select(Comprobante)
+        .where(
+            Comprobante.empresa_id == empresa_id,
+            Comprobante.tipo.in_(["INTEGRACION_NOMINA", "INTEGRACION_POS"])
+        )
+        .order_by(Comprobante.fecha.desc(), Comprobante.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    comprobantes = result.scalars().all()
+
+    historial = []
+    for c in comprobantes:
+        es_nom = c.tipo == "INTEGRACION_NOMINA"
+        historial.append({
+            "id": str(c.id),
+            "origen": "Kantio Nómina (LOTTT)" if es_nom else "Kantio FastPOS (Ventas Diarias)",
+            "evento": c.concepto,
+            "status": "SINCRONIZADO" if c.estado == "ASENTADO" else c.estado,
+            "fecha": str(c.fecha),
+            "monto_ves": f"Bs. {float(c.total_debito_base):,.2f}",
+            "monto_usd": f"$ {float(c.total_debito_divisa):,.2f}",
+            "voucher": c.numero
+        })
+
+    return historial

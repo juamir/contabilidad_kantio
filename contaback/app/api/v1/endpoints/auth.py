@@ -89,6 +89,33 @@ async def register_admin(user_in: UsuarioCreate, db: AsyncSession = Depends(get_
     await db.refresh(user)
     return user
 
+@router.post("/usuarios", response_model=UsuarioOut, status_code=status.HTTP_201_CREATED)
+async def create_usuario(
+    user_in: UsuarioCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    stmt = select(Usuario).where(Usuario.email == user_in.email)
+    existing = (await db.execute(stmt)).scalars().first()
+    if existing:
+        raise HTTPException(status_code=400, detail="El correo ya se encuentra registrado.")
+
+    user = Usuario(
+        email=user_in.email.strip().lower(),
+        hashed_password=get_password_hash(user_in.password),
+        nombre_completo=user_in.nombre_completo.strip(),
+        telefono=user_in.telefono,
+        tipo_usuario=user_in.tipo_usuario,
+        empresa_id=user_in.empresa_id,
+        estudio_id=user_in.estudio_id,
+        rol=user_in.rol,
+        activo=True
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
 @router.get("/usuarios", response_model=list[UsuarioOut])
 async def list_usuarios(
     db: AsyncSession = Depends(get_db)

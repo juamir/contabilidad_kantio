@@ -17,6 +17,7 @@ from app.models.comprobante import (
     ComprobanteModeloRenglon
 )
 from app.models.fiscal import FacturaFiscal, ComprobanteRetencionIva
+from app.models.banco import CuentaBancaria
 
 __all__ = [
     "Base",
@@ -43,5 +44,6 @@ __all__ = [
     "ComprobanteModelo",
     "ComprobanteModeloRenglon",
     "FacturaFiscal",
-    "ComprobanteRetencionIva"
+    "ComprobanteRetencionIva",
+    "CuentaBancaria"
 ]

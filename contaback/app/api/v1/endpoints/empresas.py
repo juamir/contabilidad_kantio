@@ -365,3 +365,34 @@ async def create_grupo_empresarial(
     await db.commit()
     await db.refresh(grupo)
     return grupo
+
+@router.put("/grupos/{grupo_id}", response_model=GrupoEmpresarialOut)
+async def update_grupo_empresarial(
+    grupo_id: UUID,
+    grupo_in: GrupoEmpresarialCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    grupo = await db.get(GrupoEmpresarial, grupo_id)
+    if not grupo:
+        raise HTTPException(status_code=404, detail="Grupo empresarial no encontrado.")
+
+    grupo.codigo = grupo_in.codigo
+    grupo.nombre = grupo_in.nombre
+    await db.commit()
+    await db.refresh(grupo)
+    return grupo
+
+@router.delete("/grupos/{grupo_id}", status_code=status.HTTP_200_OK)
+async def delete_grupo_empresarial(
+    grupo_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    grupo = await db.get(GrupoEmpresarial, grupo_id)
+    if not grupo:
+        raise HTTPException(status_code=404, detail="Grupo empresarial no encontrado.")
+
+    grupo.activo = False
+    await db.commit()
+    return {"status": "success", "message": "Grupo empresarial desactivado.", "id": str(grupo_id)}

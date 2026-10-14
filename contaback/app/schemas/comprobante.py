@@ -90,3 +90,51 @@ class ComprobanteListOut(ComprobanteBase):
 
     class Config:
         from_attributes = True
+
+class ComprobanteModeloRenglonCreate(BaseModel):
+    numero_linea: int = 1
+    cuenta_id: UUID
+    descripcion: str
+    es_debito: bool = True
+    porcentaje: Optional[float] = None
+
+class ComprobanteModeloRenglonOut(BaseModel):
+    id: UUID
+    numero_linea: int
+    cuenta_id: UUID
+    descripcion: str
+    es_debito: bool
+    porcentaje: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+class ComprobanteModeloCreate(BaseModel):
+    codigo: str
+    descripcion: str
+    renglones: List[ComprobanteModeloRenglonCreate] = []
+
+class ComprobanteModeloOut(BaseModel):
+    id: UUID
+    empresa_id: UUID
+    codigo: str
+    descripcion: str
+    activo: bool
+    created_at: datetime
+    renglones: List[ComprobanteModeloRenglonOut] = []
+
+    class Config:
+        from_attributes = True
+
+class PeriodoContableOut(BaseModel):
+    id: UUID
+    empresa_id: UUID
+    ano: int
+    mes: int
+    fecha_inicio: date
+    fecha_fin: date
+    cerrado: bool
+    cerrado_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

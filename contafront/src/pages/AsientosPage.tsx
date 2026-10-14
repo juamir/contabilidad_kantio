@@ -427,7 +427,7 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
     setSearchParams({ tab: 'asientos' });
   };
 
-  // --- TAB 1: MODELOS CONTABLES FILTRO ---
+  // --- TAB 1: MODELOS CONTABLES FILTRO & API ---
   const [categoriaModelo, setCategoriaModelo] = useState<string>('TODAS');
   const [modelosList, setModelosList] = useState<ComprobanteModelo[]>(MODELOS_CONTABLES_ESTANDAR);
   const [modalModeloOpen, setModalModeloOpen] = useState(false);
@@ -438,32 +438,82 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
     descripcion: ''
   });
 
-  const handleCrearModelo = () => {
+  const cargarModelos = async () => {
+    if (!empresaActiva?.id) return;
+    try {
+      const data = await api.get<any[]>(`/asientos/empresas/${empresaActiva.id}/modelos`);
+      if (Array.isArray(data) && data.length > 0) {
+        const mapeados: ComprobanteModelo[] = data.map((m) => ({
+          id: m.id,
+          codigo: m.codigo,
+          nombre: m.nombre,
+          categoria: (m.categoria || 'OPERACIONES') as any,
+          modulo_origen: m.modulo_origen || 'Contabilidad General',
+          descripcion: m.descripcion || '',
+          renglones: Array.isArray(m.renglones) ? m.renglones : [],
+        }));
+        // Combinar con los estándar si no están duplicados
+        const idsExistentes = new Set(mapeados.map((m) => m.codigo));
+        const estandarRestantes = MODELOS_CONTABLES_ESTANDAR.filter((m) => !idsExistentes.has(m.codigo));
+        setModelosList([...mapeados, ...estandarRestantes]);
+      } else {
+        setModelosList(MODELOS_CONTABLES_ESTANDAR);
+      }
+    } catch (err) {
+      console.warn('Error cargando modelos desde API:', err);
+    }
+  };
+
+  const handleCrearModelo = async () => {
     if (!nuevoModeloForm.codigo || !nuevoModeloForm.nombre) {
       alert('Código y nombre de la plantilla son obligatorios.');
       return;
     }
-    const nuevo: ComprobanteModelo = {
-      id: `mod-${Date.now()}`,
-      codigo: nuevoModeloForm.codigo,
-      nombre: nuevoModeloForm.nombre,
-      categoria: nuevoModeloForm.categoria as any,
-      modulo_origen: 'Contabilidad General',
-      descripcion: nuevoModeloForm.descripcion,
-      renglones: [
-        { codigo_cuenta: '1.1.01.001', descripcion_cuenta: 'CAJA GENERAL (VES)', naturaleza: 'DEBE', porcentaje_o_regla: '100% Débito' },
-        { codigo_cuenta: '4.1.01.001', descripcion_cuenta: 'VENTAS MERCANCIAS', naturaleza: 'HABER', porcentaje_o_regla: '100% Crédito' },
-      ]
-    };
-    setModelosList([nuevo, ...modelosList]);
-    setModalModeloOpen(false);
-    setToastMessage(`Plantilla modelo ${nuevoModeloForm.codigo} creada con éxito.`);
+    if (!empresaActiva?.id) {
+      alert('Debe tener una empresa activa seleccionada.');
+      return;
+    }
+    const renglonesBase = [
+      { codigo_cuenta: '1.1.01.001', descripcion_cuenta: 'CAJA GENERAL (VES)', naturaleza: 'DEBE' as const, porcentaje_o_regla: '100% Débito' },
+      { codigo_cuenta: '4.1.01.001', descripcion_cuenta: 'VENTAS MERCANCIAS', naturaleza: 'HABER' as const, porcentaje_o_regla: '100% Crédito' },
+    ];
+    try {
+      const payload = {
+        codigo: nuevoModeloForm.codigo.toUpperCase().trim(),
+        nombre: nuevoModeloForm.nombre.trim(),
+        descripcion: nuevoModeloForm.descripcion.trim(),
+        modulo_origen: 'Contabilidad General',
+        renglones: renglonesBase,
+      };
+      const created = await api.post<any>(`/asientos/empresas/${empresaActiva.id}/modelos`, payload);
+      const nuevo: ComprobanteModelo = {
+        id: created.id,
+        codigo: created.codigo,
+        nombre: created.nombre,
+        categoria: nuevoModeloForm.categoria as any,
+        modulo_origen: created.modulo_origen || 'Contabilidad General',
+        descripcion: created.descripcion,
+        renglones: renglonesBase,
+      };
+      setModelosList([nuevo, ...modelosList]);
+      setModalModeloOpen(false);
+      setToastMessage(`Plantilla modelo ${nuevoModeloForm.codigo} creada y persistida con éxito.`);
+    } catch (err: any) {
+      alert(`Error al guardar plantilla modelo: ${err.message || err}`);
+    }
   };
 
-  const handleEliminarModelo = (id: string, codigo: string) => {
+  const handleEliminarModelo = async (id: string, codigo: string) => {
     if (window.confirm(`¿Desea eliminar la plantilla modelo ${codigo}?`)) {
-      setModelosList(modelosList.filter((m) => m.id !== id));
-      setToastMessage(`Plantilla modelo ${codigo} eliminada.`);
+      try {
+        if (!id.startsWith('mod-')) {
+          await api.delete(`/asientos/modelos/${id}`);
+        }
+        setModelosList(modelosList.filter((m) => m.id !== id));
+        setToastMessage(`Plantilla modelo ${codigo} eliminada.`);
+      } catch (err: any) {
+        alert(`Error al eliminar plantilla: ${err.message || err}`);
+      }
     }
   };
 
@@ -471,26 +521,106 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
     (m) => categoriaModelo === 'TODAS' || m.categoria === categoriaModelo
   );
 
-  // --- TAB 2: CIERRES PERIODOS ---
-  const [periodos, setPeriodos] = useState([
-    { periodo: '2026-10', nombre: 'Octubre 2026', estado: 'ABIERTO', comprobantes: 18, fecha_inicio: '2026-10-01', fecha_fin: '2026-10-31' },
-    { periodo: '2026-09', nombre: 'Septiembre 2026', estado: 'BLOQUEADO', comprobantes: 142, fecha_inicio: '2026-09-01', fecha_fin: '2026-09-30' },
-    { periodo: '2026-08', nombre: 'Agosto 2026', estado: 'CERRADO DEFINITIVO', comprobantes: 156, fecha_inicio: '2026-08-01', fecha_fin: '2026-08-31' },
-    { periodo: '2026-07', nombre: 'Julio 2026', estado: 'CERRADO DEFINITIVO', comprobantes: 138, fecha_inicio: '2026-07-01', fecha_fin: '2026-07-31' },
-  ]);
+  // --- TAB 2: PROCESAMIENTO POR LOTE ---
+  const [fechaDesdeLote, setFechaDesdeLote] = useState('2026-10-01');
+  const [fechaHastaLote, setFechaHastaLote] = useState('2026-10-31');
+  const [fechaDesdeReverso, setFechaDesdeReverso] = useState('2026-10-01');
+  const [fechaHastaReverso, setFechaHastaReverso] = useState('2026-10-31');
+  const [loteProcesando, setLoteProcesando] = useState(false);
 
-  const handleToggleBloqueoPeriodo = (periodoKey: string) => {
-    setPeriodos((prev) =>
-      prev.map((p) => {
-        if (p.periodo !== periodoKey) return p;
-        const nuevoEstado = p.estado === 'ABIERTO' ? 'BLOQUEADO' : 'ABIERTO';
-        setToastMessage(`Periodo ${p.nombre} cambiado a ${nuevoEstado}.`);
-        return { ...p, estado: nuevoEstado };
-      })
-    );
+  const handleAsentarLote = async () => {
+    if (!empresaActiva?.id) {
+      alert('Debe tener una empresa activa.');
+      return;
+    }
+    try {
+      setLoteProcesando(true);
+      const res = await api.post<any>(
+        `/asientos/empresas/${empresaActiva.id}/procesar-lote?operacion=ASENTAR&desde=${fechaDesdeLote}&hasta=${fechaHastaLote}`
+      );
+      setToastMessage(`Lote procesado: ${res.comprobantes_afectados} comprobantes asentados en la base de datos.`);
+      await cargarAsientos();
+    } catch (err: any) {
+      alert(`Error al procesar lote: ${err.message || err}`);
+    } finally {
+      setLoteProcesando(false);
+    }
   };
 
-  // --- TAB 3: INFLACIÓN (NIC 29) ---
+  const handleReversarLote = async () => {
+    if (!empresaActiva?.id) {
+      alert('Debe tener una empresa activa.');
+      return;
+    }
+    if (window.confirm('¿Confirma reversar a estado BORRADOR los comprobantes del periodo seleccionado?')) {
+      try {
+        setLoteProcesando(true);
+        const res = await api.post<any>(
+          `/asientos/empresas/${empresaActiva.id}/procesar-lote?operacion=REVERSAR&desde=${fechaDesdeReverso}&hasta=${fechaHastaReverso}`
+        );
+        setToastMessage(`Lote reversado: ${res.comprobantes_afectados} comprobantes devueltos a BORRADOR.`);
+        await cargarAsientos();
+      } catch (err: any) {
+        alert(`Error al reversar lote: ${err.message || err}`);
+      } finally {
+        setLoteProcesando(false);
+      }
+    }
+  };
+
+  // --- TAB 3: CIERRES PERIODOS ---
+  const [periodos, setPeriodos] = useState<any[]>([]);
+
+  const cargarPeriodos = async () => {
+    if (!empresaActiva?.id) return;
+    try {
+      const data = await api.get<any[]>(`/asientos/empresas/${empresaActiva.id}/periodos`);
+      if (Array.isArray(data) && data.length > 0) {
+        setPeriodos(data);
+      } else {
+        setPeriodos([
+          { periodo: '2026-10', nombre: 'Octubre 2026', estado: 'ABIERTO', comprobantes: asientosRegistrados.length, fecha_inicio: '2026-10-01', fecha_fin: '2026-10-31' },
+          { periodo: '2026-09', nombre: 'Septiembre 2026', estado: 'BLOQUEADO', comprobantes: 0, fecha_inicio: '2026-09-01', fecha_fin: '2026-09-30' },
+          { periodo: '2026-08', nombre: 'Agosto 2026', estado: 'CERRADO', comprobantes: 0, fecha_inicio: '2026-08-01', fecha_fin: '2026-08-31' },
+        ]);
+      }
+    } catch (err) {
+      console.warn('Error cargando periodos:', err);
+    }
+  };
+
+  const handleToggleBloqueoPeriodo = async (p: any) => {
+    if (!empresaActiva?.id) return;
+    const accion = p.estado === 'ABIERTO' ? 'BLOQUEAR' : 'DESBLOQUEAR';
+    try {
+      await api.post(`/asientos/empresas/${empresaActiva.id}/periodos/cerrar?periodo=${p.periodo}&accion=${accion}`);
+      setPeriodos((prev) =>
+        prev.map((item) => {
+          if (item.periodo !== p.periodo) return item;
+          const nuevoEstado = item.estado === 'ABIERTO' ? 'BLOQUEADO' : 'ABIERTO';
+          return { ...item, estado: nuevoEstado };
+        })
+      );
+      setToastMessage(`Periodo ${p.nombre} cambiado a ${accion === 'BLOQUEAR' ? 'BLOQUEADO' : 'ABIERTO'} en base de datos.`);
+    } catch (err: any) {
+      alert(`Error al actualizar estado del periodo: ${err.message || err}`);
+    }
+  };
+
+  const handleEjecutarCierreMensual = async () => {
+    if (!empresaActiva?.id) return;
+    const periodoActual = periodos[0]?.periodo || '2026-10';
+    try {
+      const res = await api.post<any>(`/asientos/empresas/${empresaActiva.id}/periodos/cerrar?periodo=${periodoActual}&accion=CERRAR`);
+      setToastMessage(`Cierre mensual ejecutado exitosamente para el periodo ${res.periodo}.`);
+      await cargarPeriodos();
+      await cargarAsientos();
+    } catch (err: any) {
+      alert(`Error al ejecutar cierre de periodo: ${err.message || err}`);
+    }
+  };
+
+  // --- TAB 4: INFLACIÓN (NIC 29) ---
   const inpcHistorico = [
     { periodo: 'Sep 2026', inpc: 45210.5, inflacion_mes: '2.1%' },
     { periodo: 'Ago 2026', inpc: 44280.2, inflacion_mes: '1.9%' },
@@ -499,13 +629,34 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
     { periodo: 'May 2026', inpc: 41603.5, inflacion_mes: '1.8%' },
   ];
 
-  // --- TAB 4: INTEGRACIONES NÓMINA & POS ---
-  const [integraciones] = useState([
-    { origen: 'Kantio Nómina (LOTTT)', evento: 'Corrida Quincenal 30/09/2026', status: 'SINCRONIZADO', monto_ves: 'Bs. 84.500,00', voucher: 'AS-NOM-2026-09-2' },
-    { origen: 'Kantio Nómina (LOTTT)', evento: 'Aportes Patronales IVSS/FAOV', status: 'SINCRONIZADO', monto_ves: 'Bs. 12.340,00', voucher: 'AS-PARAF-2026-09' },
-    { origen: 'Kantio FastPOS', evento: 'Corte Z Diario (Tienda Principal)', status: 'SINCRONIZADO', monto_ves: 'Bs. 45.890,00', voucher: 'POS-Z-20261001' },
-    { origen: 'Kantio FastPOS', evento: 'Cobros IGTF en Divisas Efectivo', status: 'SINCRONIZADO', monto_ves: 'Bs. 3.200,00', voucher: 'IGTF-POS-20261001' },
-  ]);
+  // --- TAB 5: INTEGRACIONES NÓMINA & POS ---
+  const [integraciones, setIntegraciones] = useState<any[]>([]);
+
+  const cargarIntegraciones = async () => {
+    if (!empresaActiva?.id) return;
+    try {
+      const data = await api.get<any[]>(`/integracion/empresas/${empresaActiva.id}/historial`);
+      if (Array.isArray(data) && data.length > 0) {
+        setIntegraciones(data);
+      } else {
+        setIntegraciones([
+          { origen: 'Kantio Nómina (LOTTT)', evento: 'Corrida Quincenal Nómina Regular', status: 'SINCRONIZADO', monto_ves: 'Bs. 84.500,00', voucher: 'AS-NOM-2026' },
+          { origen: 'Kantio Nómina (LOTTT)', evento: 'Aportes Patronales IVSS/FAOV', status: 'SINCRONIZADO', monto_ves: 'Bs. 12.340,00', voucher: 'AS-PARAF-2026' },
+          { origen: 'Kantio FastPOS', evento: 'Corte Z Diario (Tienda Principal)', status: 'SINCRONIZADO', monto_ves: 'Bs. 45.890,00', voucher: 'POS-Z-2026' },
+        ]);
+      }
+    } catch (err) {
+      console.warn('Error cargando historial de integración:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (empresaActiva?.id) {
+      cargarModelos();
+      cargarPeriodos();
+      cargarIntegraciones();
+    }
+  }, [empresaActiva?.id]);
 
   return (
     <Box>
@@ -938,23 +1089,21 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
                   </Typography>
                   <Grid container spacing={2} sx={{ mb: 2 }}>
                     <Grid item xs={6}>
-                      <TextField fullWidth size="small" type="date" label="Desde" defaultValue="2026-10-01" InputLabelProps={{ shrink: true }} />
+                      <TextField fullWidth size="small" type="date" label="Desde" value={fechaDesdeLote} onChange={(e) => setFechaDesdeLote(e.target.value)} InputLabelProps={{ shrink: true }} />
                     </Grid>
                     <Grid item xs={6}>
-                      <TextField fullWidth size="small" type="date" label="Hasta" defaultValue="2026-10-31" InputLabelProps={{ shrink: true }} />
+                      <TextField fullWidth size="small" type="date" label="Hasta" value={fechaHastaLote} onChange={(e) => setFechaHastaLote(e.target.value)} InputLabelProps={{ shrink: true }} />
                     </Grid>
                   </Grid>
                   <Button
                     variant="contained"
                     color="primary"
                     fullWidth
+                    disabled={loteProcesando}
                     startIcon={<CheckCircleIcon />}
-                    onClick={() => {
-                      alert('Procesamiento por lote ejecutado:\n- 14 Comprobantes validados y aprobados exitosamente a estado ASENTADO.');
-                      setToastMessage('Lote procesado: 14 comprobantes asentados.');
-                    }}
+                    onClick={handleAsentarLote}
                   >
-                    Aprobar & Asentar Lote
+                    {loteProcesando ? 'Procesando Lote...' : 'Aprobar & Asentar Lote'}
                   </Button>
                 </Paper>
               </Grid>
@@ -969,25 +1118,21 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
                   </Typography>
                   <Grid container spacing={2} sx={{ mb: 2 }}>
                     <Grid item xs={6}>
-                      <TextField fullWidth size="small" type="date" label="Desde" defaultValue="2026-10-01" InputLabelProps={{ shrink: true }} />
+                      <TextField fullWidth size="small" type="date" label="Desde" value={fechaDesdeReverso} onChange={(e) => setFechaDesdeReverso(e.target.value)} InputLabelProps={{ shrink: true }} />
                     </Grid>
                     <Grid item xs={6}>
-                      <TextField fullWidth size="small" type="date" label="Hasta" defaultValue="2026-10-31" InputLabelProps={{ shrink: true }} />
+                      <TextField fullWidth size="small" type="date" label="Hasta" value={fechaHastaReverso} onChange={(e) => setFechaHastaReverso(e.target.value)} InputLabelProps={{ shrink: true }} />
                     </Grid>
                   </Grid>
                   <Button
                     variant="outlined"
                     color="warning"
                     fullWidth
+                    disabled={loteProcesando}
                     startIcon={<PlayArrowIcon />}
-                    onClick={() => {
-                      if (window.confirm('¿Confirma reversar a estado BORRADOR los comprobantes del periodo seleccionado?')) {
-                        alert('Reverso de lote ejecutado:\n- 14 Comprobantes restaurados a estado BORRADOR para edición.');
-                        setToastMessage('Lote reversado a borrador.');
-                      }
-                    }}
+                    onClick={handleReversarLote}
                   >
-                    Reversar Lote a Borrador
+                    {loteProcesando ? 'Reversando Lote...' : 'Reversar Lote a Borrador'}
                   </Button>
                 </Paper>
               </Grid>
@@ -1042,7 +1187,7 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
                               size="small"
                               variant="outlined"
                               color={p.estado === 'ABIERTO' ? 'warning' : 'success'}
-                              onClick={() => handleToggleBloqueoPeriodo(p.periodo)}
+                              onClick={() => handleToggleBloqueoPeriodo(p)}
                             >
                               {p.estado === 'ABIERTO' ? 'Bloquear Periodo' : 'Desbloquear Periodo'}
                             </Button>
@@ -1084,10 +1229,7 @@ export const AsientosPage: React.FC<Props> = ({ initialTab }) => {
                       color="error"
                       fullWidth
                       sx={{ textTransform: 'none', fontWeight: 'bold' }}
-                      onClick={() => {
-                        alert('Cierre mensual ejecutado exitosamente. Se ha generado el asiento automático de cierre.');
-                        setToastMessage('Cierre de periodo ejecutado correctamente.');
-                      }}
+                      onClick={handleEjecutarCierreMensual}
                     >
                       Ejecutar Cierre de Periodo
                     </Button>
