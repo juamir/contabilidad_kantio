@@ -28,32 +28,28 @@ from sqlalchemy import text
 async def startup_event():
     # Migración defensiva en caliente para prevenir error 500 (columna faltante y nuevas tablas)
     async with engine.begin() as conn:
-        await conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS grupos_empresariales (
+        ddl_statements = [
+            """CREATE TABLE IF NOT EXISTS grupos_empresariales (
                 id UUID PRIMARY KEY,
                 codigo VARCHAR(20) UNIQUE NOT NULL,
                 nombre VARCHAR(255) NOT NULL,
                 activo BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS nombre_comercial VARCHAR(255);
-            ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS nit VARCHAR(50);
-            ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS prioridad INTEGER DEFAULT 0;
-            ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS es_grupo_holding BOOLEAN DEFAULT FALSE;
-            ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS grupo_id UUID;
-            ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS plan_suscripcion VARCHAR(50) DEFAULT 'ESTANDAR';
-            ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS licencia_lease_token TEXT;
-            ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT TRUE;
-
-            ALTER TABLE IF EXISTS usuarios ADD COLUMN IF NOT EXISTS avatar_url TEXT;
-            ALTER TABLE IF EXISTS usuarios ADD COLUMN IF NOT EXISTS rol VARCHAR(50) DEFAULT 'CONTADOR';
-            ALTER TABLE IF EXISTS usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT TRUE;
-
-            ALTER TABLE IF EXISTS facturas_fiscales ADD COLUMN IF NOT EXISTS rif_tercero VARCHAR(20);
-            ALTER TABLE IF EXISTS facturas_fiscales ADD COLUMN IF NOT EXISTS nombre_tercero VARCHAR(255);
-        """))
-        await conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS cuentas_bancarias (
+            )""",
+            "ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS nombre_comercial VARCHAR(255)",
+            "ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS nit VARCHAR(50)",
+            "ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS prioridad INTEGER DEFAULT 0",
+            "ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS es_grupo_holding BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS grupo_id UUID",
+            "ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS plan_suscripcion VARCHAR(50) DEFAULT 'ESTANDAR'",
+            "ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS licencia_lease_token TEXT",
+            "ALTER TABLE IF EXISTS empresas ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT TRUE",
+            "ALTER TABLE IF EXISTS usuarios ADD COLUMN IF NOT EXISTS avatar_url TEXT",
+            "ALTER TABLE IF EXISTS usuarios ADD COLUMN IF NOT EXISTS rol VARCHAR(50) DEFAULT 'CONTADOR'",
+            "ALTER TABLE IF EXISTS usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT TRUE",
+            "ALTER TABLE IF EXISTS facturas_fiscales ADD COLUMN IF NOT EXISTS rif_tercero VARCHAR(20)",
+            "ALTER TABLE IF EXISTS facturas_fiscales ADD COLUMN IF NOT EXISTS nombre_tercero VARCHAR(255)",
+            """CREATE TABLE IF NOT EXISTS cuentas_bancarias (
                 id UUID PRIMARY KEY,
                 empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
                 codigo VARCHAR(20) NOT NULL,
@@ -68,9 +64,15 @@ async def startup_event():
                 cuenta_contable_id UUID REFERENCES cuentas_contables(id),
                 activo BOOLEAN NOT NULL DEFAULT TRUE,
                 created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-        """))
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_cuentas_bancarias_empresa_id ON cuentas_bancarias (empresa_id);"))
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_cuentas_bancarias_empresa_id ON cuentas_bancarias (empresa_id)"
+        ]
+        for stmt in ddl_statements:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as ddl_err:
+                print(f"Nota DDL: {ddl_err}")
+
         await conn.run_sync(Base.metadata.create_all)
 
     # Inyectar datos semilla precargados automáticos
